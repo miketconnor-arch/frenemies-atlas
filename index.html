@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#04060b">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Style Nebula Atlas · Hologram</title>
+<style>
+  :root{--bg:#04060b;--ink:#e8eef8;--ink2:#b6c2d4;--ink3:#7d8aa0;--holo:#7fe3ff;--line:rgba(127,227,255,.28)}
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family:Tahoma,Verdana,Geneva,sans-serif;overflow:hidden;
+    -webkit-tap-highlight-color:transparent;-webkit-user-select:none;user-select:none;touch-action:none;overscroll-behavior:none}
+  button{font:inherit;color:inherit;cursor:pointer}
+  /* the camera feed sits beneath the drawing; AR.js places its own video element, which these rules tame */
+  video{position:fixed!important;object-fit:cover}
+  #gl{position:fixed;inset:0;display:block;z-index:2;touch-action:none}
+  /* start screen */
+  #start{position:fixed;inset:0;z-index:20;display:grid;place-items:center;padding:24px;
+    background:radial-gradient(ellipse at 50% 60%,rgba(127,227,255,.10),transparent 60%),var(--bg)}
+  #start .in{max-width:440px;text-align:center}
+  .eyebrow{color:var(--holo);letter-spacing:4px;font-size:11px;text-transform:uppercase;margin:0 0 10px}
+  #start h1{font-weight:normal;font-size:30px;line-height:1.15;margin:0 0 12px;letter-spacing:1px}
+  #start p{color:var(--ink2);font-size:14px;line-height:1.55;margin:0 0 20px}
+  .go{display:block;width:100%;padding:14px 18px;margin:0 0 10px;border:1px solid var(--holo);background:rgba(127,227,255,.14);border-radius:28px;font-size:16px;letter-spacing:1px}
+  .quiet{display:block;width:100%;padding:12px 18px;margin:0 0 8px;border:1px solid rgba(255,255,255,.18);background:transparent;border-radius:28px;color:var(--ink2);font-size:14px}
+  #start a{color:var(--ink3);font-size:13px}
+  #msg{color:#ffb3a7;font-size:13px;min-height:1.2em;margin-top:12px;line-height:1.5}
+  /* heads-up controls */
+  #hud{position:fixed;left:0;right:0;top:0;z-index:5;display:flex;justify-content:space-between;align-items:flex-start;gap:8px;
+    padding:calc(10px + env(safe-area-inset-top)) 12px 0;pointer-events:none}
+  #status{pointer-events:none;font-size:12px;letter-spacing:1px;color:var(--ink2);background:rgba(4,6,11,.6);border:1px solid var(--line);border-radius:16px;padding:6px 12px;display:flex;align-items:center;gap:8px}
+  #status i{width:8px;height:8px;border-radius:50%;background:#ffb347;display:inline-block}
+  #status.lock i{background:#7fffb2;box-shadow:0 0 8px #7fffb2}
+  #tools{display:flex;gap:6px;pointer-events:auto}
+  #tools button{background:rgba(4,6,11,.6);border:1px solid var(--line);border-radius:16px;padding:6px 11px;font-size:12px;color:var(--ink2)}
+  #tools button[aria-pressed="true"]{color:var(--holo);border-color:var(--holo)}
+  #hint{position:fixed;left:50%;bottom:calc(18px + env(safe-area-inset-bottom));transform:translateX(-50%);z-index:5;font-size:12px;color:var(--ink2);
+    background:rgba(4,6,11,.6);border:1px solid var(--line);border-radius:16px;padding:7px 14px;white-space:nowrap;pointer-events:none;transition:opacity .4s}
+  /* the card: a flat panel beside the camera view (right side when held sideways, bottom when upright) */
+  #card{position:fixed;z-index:10;background:rgba(6,10,18,.92);border:1px solid var(--line);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
+    display:flex;flex-direction:column;overflow:hidden;transition:transform .35s ease;touch-action:pan-y}
+  @media (orientation:landscape){ #card{top:0;right:0;bottom:0;width:min(42vw,440px);border-width:0 0 0 1px;transform:translateX(105%)} #card.open{transform:none} }
+  @media (orientation:portrait){ #card{left:0;right:0;bottom:0;height:min(56vh,560px);border-width:1px 0 0;border-radius:16px 16px 0 0;transform:translateY(105%)} #card.open{transform:none} }
+  #card .x{position:absolute;right:10px;top:10px;z-index:2;width:34px;height:34px;border-radius:50%;border:1px solid var(--line);background:rgba(4,6,11,.7);font-size:16px;line-height:1}
+  #card .body{overflow-y:auto;-webkit-overflow-scrolling:touch;padding:0 0 calc(18px + env(safe-area-inset-bottom));-webkit-user-select:text;user-select:text}
+  .ph{position:relative;background:#000;aspect-ratio:4/3;overflow:hidden}
+  .ph img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+  .ph .scan{position:absolute;inset:0;background:repeating-linear-gradient(0deg,rgba(127,227,255,.06) 0 1px,transparent 1px 3px);pointer-events:none}
+  .ph .dots{position:absolute;left:0;right:0;bottom:8px;display:flex;justify-content:center;gap:6px}
+  .ph .dots b{width:7px;height:7px;border-radius:50%;background:rgba(255,255,255,.35)} .ph .dots b.on{background:#fff}
+  .capt{font-size:11.5px;color:var(--ink3);padding:6px 16px 0;font-style:italic}
+  .txt{padding:12px 16px 0}
+  .kind{font-size:10.5px;letter-spacing:3px;text-transform:uppercase;color:var(--holo);margin:0 0 6px}
+  .txt h2{font-weight:normal;font-size:21px;line-height:1.2;margin:0 0 6px}
+  .meta{font-size:13.5px;color:var(--ink2);margin:0 0 4px;line-height:1.45}
+  .rate{font-weight:bold}
+  .sty{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 2px}
+  .sty span{font-size:12px;border:1px solid;border-radius:12px;padding:2px 9px}
+  .notes{font-size:14px;line-height:1.55;color:var(--ink);margin:12px 0 0;white-space:pre-wrap}
+  .rel{margin:14px 0 0;font-size:12.5px;color:var(--ink3)} .rel button{display:block;text-align:left;width:100%;background:none;border:0;border-top:1px solid rgba(255,255,255,.08);padding:8px 0;color:var(--ink2);font-size:13px}
+  #help{position:fixed;inset:0;z-index:15;display:none;place-items:center;background:rgba(4,6,11,.82);padding:24px}
+  #help.on{display:grid} #help .in{max-width:400px;font-size:14px;line-height:1.6;color:var(--ink2)} #help b{color:var(--ink)}
+</style>
+</head>
+<body>
+<canvas id="gl"></canvas>
+
+<div id="start"><div class="in">
+  <p class="eyebrow">Hologram</p>
+  <h1 id="title">Style Nebula Atlas</h1>
+  <p>Point your camera at the printed square. The atlas rises from it: the map on the table, time climbing upward. Pinch to scale, drag to move, twist with two fingers to turn, tap a world to read it.</p>
+  <button class="go" id="goCam">Start the camera</button>
+  <button class="quiet" id="goPreview">Look without the camera</button>
+  <a href="marker.html">Print the marker</a>
+  <div id="msg"></div>
+</div></div>
+
+<div id="hud" hidden>
+  <div id="status"><i></i><span>Looking for the square…</span></div>
+  <div id="tools">
+    <button type="button" id="bLabels" aria-pressed="false">Names</button>
+    <button type="button" id="bReset">Reset</button>
+    <button type="button" id="bHelp">?</button>
+  </div>
+</div>
+<div id="hint" hidden>Pinch to scale · drag to move · tap a world</div>
+
+<aside id="card" aria-live="polite"><button type="button" class="x" id="cardX" aria-label="Close">✕</button><div class="body" id="cardBody"></div></aside>
+
+<div id="help"><div class="in">
+  <p><b>Hold the printed square in view.</b> The hologram is pinned to it; if the square leaves the picture, the hologram waits where it was.</p>
+  <p><b>One finger drag</b> slides the atlas across the table. <b>Pinch</b> grows or shrinks it. <b>Two-finger twist</b> turns it. <b>Tap</b> a world to open its card; tap empty space to close it. <b>Reset</b> puts it back on the square.</p>
+  <p>The map lies flat; the higher a world floats, the later it was made. Size and brightness are the impact rating: the brightest are friends (+10), the cold blue ones enemies (−10). Works with no single date or place circle the outside ring.</p>
+  <button class="quiet" onclick="document.getElementById('help').classList.remove('on')">Close</button>
+</div></div>
+
+<script src="config.js"></script>
+<script src="lib/three.min.js"></script>
+<script src="lib/ar-threex.js"></script>
+<script src="lib/qrcode.js"></script>
+<script src="lib/coast.js"></script>
+<script src="marker.js"></script>
+<script src="hologram.js"></script>
+</body>
+</html>

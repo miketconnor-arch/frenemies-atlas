@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Print the hologram marker</title>
+<style>
+  :root{--ink:#0b0f18;--muted:#5d6676}
+  html,body{margin:0;background:#fff;color:var(--ink);font-family:Tahoma,Verdana,Geneva,sans-serif}
+  .screen{max-width:760px;margin:0 auto;padding:28px 20px}
+  h1{font-weight:normal;letter-spacing:4px;font-size:22px;margin:0 0 6px}
+  p{color:var(--muted);line-height:1.5;font-size:14px}
+  .row{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin:16px 0}
+  select,button{font:inherit;padding:8px 12px;border:1px solid #c9ced8;background:#fff;border-radius:4px}
+  button.go{background:#0b0f18;color:#fff;border-color:#0b0f18;cursor:pointer}
+  .sheet{display:flex;flex-direction:column;align-items:center;gap:6mm;padding:12mm 0}
+  .sheet img{display:block;image-rendering:pixelated}
+  .cap{font-size:11pt;letter-spacing:3px;text-transform:uppercase}
+  .sub{font-size:9pt;color:var(--muted);max-width:120mm;text-align:center;line-height:1.4}
+  .url{font-size:8pt;color:var(--muted);word-break:break-all}
+  @media print{ .screen{display:none} .sheet{padding:0;margin-top:20mm} @page{size:auto;margin:10mm} }
+</style>
+</head>
+<body>
+<div class="screen">
+  <h1>HOLOGRAM MARKER</h1>
+  <p>Print this square and lay it flat on a table. Scan it with your phone's camera to open the hologram, then keep the square in view: the atlas stands on it. Print at 100% (no "fit to page"), on matte paper if you can, so it doesn't glare.</p>
+  <div class="row">
+    <label>Marker size <select id="size"><option value="8">8 cm</option><option value="10">10 cm</option><option value="12" selected>12 cm</option><option value="15">15 cm</option><option value="18">18 cm</option></select></label>
+    <button class="go" onclick="print()">Print</button>
+  </div>
+  <p id="note"></p>
+</div>
+<div class="sheet">
+  <div class="cap" id="cap">Style Nebula Atlas</div>
+  <img id="m" alt="The marker: a QR code in a black frame">
+  <div class="sub">Scan with your phone's camera. Keep this square in view and the atlas rises from it. Pinch to scale it, drag to move it, tap a world to read it.</div>
+  <div class="url" id="url"></div>
+</div>
+<script src="lib/qrcode.js"></script>
+<script src="config.js"></script>
+<script src="marker.js"></script>
+<script>
+  const url = MARKER.url(), img = document.getElementById("m");
+  img.src = MARKER.full(url, 1200).toDataURL("image/png");
+  document.getElementById("url").textContent = url;
+  if (window.AR_TITLE) document.getElementById("cap").textContent = window.AR_TITLE;
+  const set = () => { const cm = +document.getElementById("size").value; img.style.width = img.style.height = cm + "cm"; };
+  document.getElementById("size").addEventListener("change", set); set();
+  if (location.protocol !== "https:") document.getElementById("note").textContent = "This page isn't on its https address yet (it's at " + url + "). Print the marker from the GitHub Pages address, so the QR points there.";
+</script>
+</body>
+</html>
