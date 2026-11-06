@@ -437,12 +437,12 @@ async function buildUSDZ(Hh, interactive){
     return new THREE.MeshStandardMaterial({color:new THREE.Color(color), map:t, emissive:new THREE.Color(color), emissiveMap:t, transparent:true, roughness:1, metalness:0, depthWrite:false});
   };
   // the projector rings on the floor
-  [[R0*.995, R0*1.02, .95], [R0*.62, R0*.625, .4], [R0*.32, R0*.325, .35], [R0*1.16, R0*1.166, .45]].forEach(([a, b, op]) => { const m = new THREE.Mesh(new THREE.RingGeometry(a, b, 128), mat(HOLO, op)); m.rotation.x = -Math.PI/2; m.position.y = .002; add(m); });
+  [[R0*.995, R0*1.02, .95], [R0*.62, R0*.625, .4], [R0*.32, R0*.325, .35], [R0*1.16, R0*1.166, .45]].forEach(([a, b, op]) => { const m = new THREE.Mesh(new THREE.RingGeometry(a, b, 128), mat(HOLO, op)); m.rotation.x = -Math.PI/2; m.position.y = .03 + op*.02; add(m); });   // rings float a few millimetres up, each at its own height
   // coastlines as fine flat ribbons
   const cp = Hh.coast, pos = [], idx = [], wd = .01;
   for (let i = 0; i < cp.length; i += 6){
     const ax = cp[i], az = cp[i+2], bx = cp[i+3], bz = cp[i+5], dx = bx - ax, dz = bz - az, L = Math.hypot(dx, dz) || 1, nx = -dz/L*wd/2, nz = dx/L*wd/2, k = pos.length/3;
-    pos.push(ax - nx, .004, az - nz, ax + nx, .004, az + nz, bx + nx, .004, bz + nz, bx - nx, .004, bz - nz);
+    pos.push(ax - nx, .075, az - nz, ax + nx, .075, az + nz, bx + nx, .075, bz + nz, bx - nx, .075, bz - nz);   // coastlines on their own layer above the rings
     idx.push(k, k + 1, k + 2, k, k + 2, k + 3);   // wound to face up
   }
   if (pos.length){ const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3)); g.setIndex(idx); g.setAttribute("normal", new THREE.Float32BufferAttribute(new Array(pos.length/3).fill(0).flatMap(() => [0, 1, 0]), 3)); g.setAttribute("uv", new THREE.Float32BufferAttribute(new Array(pos.length/3*2).fill(0), 2)); add(new THREE.Mesh(g, mat(HOLO, .8))); }
@@ -517,6 +517,35 @@ ${act}
             }
         }
 `;
+  // a behaviour whose action is a group of steps run in order
+  const behSteps = (name, trig, steps) => `
+        def Preliminary_Behavior "${name}"
+        {
+            rel actions = <${S}${name}/Action>
+            uniform bool exclusive = 0
+            rel triggers = <${S}${name}/Trigger>
+
+            def Preliminary_Trigger "Trigger"
+            {
+${trig}
+            }
+
+            def Preliminary_Action "Action"
+            {
+                rel actions = [ ${steps.map(([n]) => "<" + S + name + "/" + n + ">").join(", ")} ]
+                token info:id = "Group"
+                bool loops = 0
+                int performCount = 1
+                token type = "serial"
+            }
+${steps.map(([n, body]) => `
+            def Preliminary_Action "${n}"
+            {
+${body}
+            }
+`).join("")}
+        }
+`;
   const enter = `                token info:id = "SceneTransition"\n                token type = "enter"`;
   const tap = objs => `                rel affectedObjects = ${L(objs)}\n                token info:id = "TapGesture"`;
   const vis = (objs, show, dur) => `                rel affectedObjects = ${L(objs)}\n                double duration = ${dur}\n                token easeType = "none"\n                token info:id = "Visibility"\n                token motionType = "none"\n                double moveDistance = 0\n                token style = "basic"\n                token type = "${show ? "show" : "hide"}"`;
@@ -526,8 +555,7 @@ ${act}
   if (facing.length) out += beh("StartFaceViewer", enter, look(facing));
   taps.forEach((t, i) => {
     const others = cards.filter(c => !t.card.includes(c));
-    if (others.length) out += beh("CloseOthers_" + i, tap(t.on), vis(others, false, 0));
-    out += beh("Open_" + i, tap(t.on), vis(t.card, true, .25));
+    out += others.length ? behSteps("Open_" + i, tap(t.on), [["CloseOthers", vis(others, false, 0)], ["Show", vis(t.card, true, .25)]]) : beh("Open_" + i, tap(t.on), vis(t.card, true, .25));
     out += beh("Close_" + i, tap(t.card), vis(t.card, false, .2));
   });
   return out;
