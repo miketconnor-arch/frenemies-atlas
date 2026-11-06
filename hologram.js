@@ -412,7 +412,8 @@ function liftLabels(items, sizeOf){
 async function buildUSDZ(Hh, interactive){
   const root = new THREE.Group(), U = XR_UNIT;
   const jpg = c => { const t = new THREE.CanvasTexture(c); t.format = 1022; return t; };   // saved as JPEG, keeps the model light
-  const mat = (color, op, emis) => new THREE.MeshStandardMaterial({color:new THREE.Color(color).multiplyScalar(.25), emissive:new THREE.Color(emis || color), roughness:.7, metalness:0, transparent:op < 1, opacity:op});
+  // everything is solid: see-through surfaces flicker against each other in Apple's viewer, so fainter parts are drawn dimmer instead
+  const mat = (color, op, emis) => new THREE.MeshStandardMaterial({color:new THREE.Color(color).multiplyScalar(.2*op), emissive:new THREE.Color(emis || color).multiplyScalar(Math.min(1, .25 + .75*op)), roughness:.7, metalness:0});
   const pmat = tex => new THREE.MeshStandardMaterial({color:0xffffff, map:tex, emissiveMap:tex, emissive:new THREE.Color(0xffffff), roughness:.8, metalness:0});
   // without behaviours a panel is printed on both faces; the back copy is turned about the vertical so it reads the right way round
   // Apple's viewer keeps a facing panel toward you but stands it a quarter turn anticlockwise, so each facing panel
@@ -423,6 +424,10 @@ async function buildUSDZ(Hh, interactive){
   const twoSided = (geo, m, setup) => { const a = new THREE.Mesh(geo, m), b = new THREE.Mesh(geo, m); setup(a); setup(b); b.rotateX(Math.PI); return [a, b]; };
   const add = o => (Array.isArray(o) ? o : [o]).forEach(x => root.add(x));
   const facing = [], cards = [], taps = [];
+  const solid = color => new THREE.MeshStandardMaterial({color:new THREE.Color(color).multiplyScalar(.3), emissive:new THREE.Color(color), roughness:1, metalness:0});
+  const ringGeo = (a, b) => { const g = new THREE.RingGeometry(a, b, 48); if (interactive) g.applyMatrix4(FIX); return g; };
+  // a four-point star: long points up, down and to the sides, short ones between, all tapering to a fine tip
+  const starGeo = (L, wdt) => { const sh = new THREE.Shape(); for (let i = 0; i < 16; i++){ const a = i*Math.PI/8, rr = i % 4 === 0 ? L : i % 4 === 2 ? L*.42 : wdt; i ? sh.lineTo(Math.cos(a)*rr, Math.sin(a)*rr) : sh.moveTo(Math.cos(a)*rr, Math.sin(a)*rr); } sh.closePath(); const g = new THREE.ShapeGeometry(sh); if (interactive) g.applyMatrix4(FIX); return g; };
   const flareMat = (color, bright, spikes) => {
     const S = 128, c = document.createElement("canvas"); c.width = c.height = S; const g = c.getContext("2d"), m = S/2;
     const gr = g.createRadialGradient(m, m, 0, m, m, m); gr.addColorStop(0, "rgba(255,255,255," + bright + ")"); gr.addColorStop(.22, "rgba(255,255,255," + (bright*.45) + ")"); gr.addColorStop(.6, "rgba(255,255,255," + (bright*.1) + ")"); gr.addColorStop(1, "rgba(255,255,255,0)");
@@ -455,15 +460,18 @@ async function buildUSDZ(Hh, interactive){
     if (it.sphere.material.uniforms.hasMap.value){
       const src = it.sphere.material.uniforms.map.value.image, c = document.createElement("canvas"); c.width = src.width; c.height = src.height; const g = c.getContext("2d"); g.drawImage(src, 0, 0);
       if (it.neg || black){ const d = g.getImageData(0, 0, c.width, c.height), a = d.data; for (let i = 0; i < a.length; i += 4){ const l = (a[i]*.3 + a[i+1]*.59 + a[i+2]*.11)*(black ? .35 : 1); a[i] = l*.62; a[i+1] = l*.8; a[i+2] = Math.min(255, l*1.08); } g.putImageData(d, 0, 0); }
+      else { const k = .55 + .5*s, d = g.getImageData(0, 0, c.width, c.height), a = d.data; for (let i = 0; i < a.length; i += 4){ a[i] = Math.min(255, a[i]*k); a[i+1] = Math.min(255, a[i+1]*k); a[i+2] = Math.min(255, a[i+2]*k); } g.putImageData(d, 0, 0); }   // the photo glows brighter the higher the rating
       tex = jpg(c);
     }
     const sph = new THREE.Mesh(new THREE.SphereGeometry(r, 28, 18), tex ? pmat(tex) : mat(black ? "#000" : col, 1, black ? "#0a1020" : col)); sph.position.copy(p); add(sph);
+    // brightness without see-through squares (Apple's viewer shows their edges as flickering boxes): a solid bright ring
+    // facing you, thicker the stronger the feeling, and for stars and supernovas a solid four-point star of light
     const glowParts = [];
-    { const gm = new THREE.Mesh(faceGeo(r*(3.2 + 4*s), r*(3.2 + 4*s)), flareMat(col, .35 + .65*s, false)); gm.position.copy(p); add(gm); facing.push(gm); glowParts.push(gm); }
-    if ((w.kind === "star" && !it.neg) || (w.void && !it.neg)){ const fm = new THREE.Mesh(faceGeo(r*(4 + 9*s), r*(4 + 9*s)), flareMat(w.void ? col : new THREE.Color("#ffffff"), .3 + .7*s, true)); fm.position.copy(p); add(fm); facing.push(fm); glowParts.push(fm); }
+    { const gr = new THREE.Mesh(ringGeo(r*1.16, r*(1.2 + .16*s)), solid(col)); gr.position.copy(p); add(gr); facing.push(gr); glowParts.push(gr); }
+    if ((w.kind === "star" && !it.neg) || (w.void && !it.neg)){ const st = new THREE.Mesh(starGeo(r*(1.9 + 3.6*s), r*(.05 + .05*s)), solid(w.void ? col : new THREE.Color("#fffbe8"))); st.position.copy(p); add(st); facing.push(st); glowParts.push(st); }
     if (black){ const tor = new THREE.Mesh(new THREE.TorusGeometry(r*(1.6 + .6*s), r*.18, 8, 48), mat(COLD, .9)); tor.position.copy(p); tor.rotation.x = Math.PI/2.4; add(tor); }
     if (!w.void && w.kind === "planet"){ const n = s >= .9 ? 3 : s >= .6 ? 2 : 1; for (let i = 0; i < n; i++) add(twoSided(new THREE.RingGeometry(r*(1.5 + .35*i), r*(1.62 + .35*i), 48), mat(col, .8 - .15*i), m => { m.position.copy(p); m.rotation.x = -Math.PI/2 + .45; })); }
-    if (!w.void && (w.kind === "comet" || w.kind === "meteor")){ const len = r*(w.kind === "comet" ? 5 + 9*s : 3 + 6*s), cone = new THREE.Mesh(new THREE.ConeGeometry(r*(w.kind === "comet" ? .75 : .45), len, 14), mat(col, .25 + .2*s)); cone.position.set(p.x, p.y - len/2, p.z); cone.rotation.z = Math.PI; add(cone); }
+    if (!w.void && (w.kind === "comet" || w.kind === "meteor")){ const len = r*(w.kind === "comet" ? 5 + 9*s : 3 + 6*s), cone = new THREE.Mesh(new THREE.ConeGeometry(r*(w.kind === "comet" ? .32 : .2), len, 10), mat(col, .3 + .4*s)); cone.position.set(p.x, p.y - len/2, p.z); cone.rotation.z = Math.PI; add(cone); }
     if (it.neg && !w.void){ const rr = rnd(hashStr(w.key || w.title)); for (let i = 0; i < 4 + Math.round(6*s); i++){ const m = new THREE.Mesh(new THREE.TetrahedronGeometry(r*(.16 + .12*rr())), mat(COLD, .8)); const a = rr()*Math.PI*2, e = (rr() - .5)*1.6, d = r*(1.5 + 1.2*s*rr()); m.position.set(p.x + Math.cos(a)*d, p.y + e*r, p.z + Math.sin(a)*d); add(m); } }
     if (!w.void && p.y - r > .01){ const st = new THREE.Mesh(new THREE.CylinderGeometry(.0035, .0035, p.y - r, 4), mat(HOLO, .45)); st.position.set(p.x, (p.y - r)/2, p.z); add(st); }
     const L0 = lab.get(it), y0 = ly.get(it);
