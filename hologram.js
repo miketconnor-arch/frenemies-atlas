@@ -7,7 +7,6 @@
 "use strict";
 const $ = id => document.getElementById(id);
 const HOLO = new THREE.Color("#7fe3ff"), COLD = new THREE.Color("#9cc4ff");
-const START_SCALE = .6;   // the hologram first appears at this size: its disc is about 2.4 marker-widths across
 const R0 = 2.0, Y0 = .32, YH = 2.15;              // in marker widths: the map's radius, the lowest year's height, the height of time
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const KIND = {star:"Building", planet:"Book or text", comet:"Installation or artwork", meteor:"Temporary work"};
@@ -169,8 +168,8 @@ async function buildHolo(payload){
     if (black){ const disk = new THREE.Mesh(new THREE.TorusGeometry(r*(1.6 + .6*s), r*.18, 8, 64), addMat(COLD, .8)); disk.rotation.x = Math.PI/2.4; g.add(disk); }
     if (nova || (w.kind === "star" && !neg)){ const sp = new THREE.Sprite(spriteMat(TEX.spike, nova ? col : new THREE.Color("#ffffff"), .25 + .7*s)); sp.scale.setScalar(r*(6 + 12*s)); g.add(sp); }
     if (!w.void && w.kind === "planet"){ const n = s >= .9 ? 3 : s >= .6 ? 2 : 1; for (let i = 0; i < n; i++){ const m = new THREE.Mesh(new THREE.RingGeometry(r*(1.5 + .35*i), r*(1.62 + .35*i), 64), addMat(tint, .75 - .15*i)); m.rotation.x = -Math.PI/2 + .45; g.add(m); } }
-    if (!w.void && (w.kind === "comet" || w.kind === "meteor")){ const len = r*(w.kind === "comet" ? 5 + 9*s : 3 + 6*s), cone = new THREE.Mesh(new THREE.ConeGeometry(r*(w.kind === "comet" ? .75 : .45), len, 16, 1, true), addMat(tint, .12 + .12*s)); cone.position.set(0, -len/2, 0); cone.rotation.z = Math.PI; g.add(cone); }
-    if (neg && !w.void){ const rr = rnd(hashStr(w.key || w.title)); for (let i = 0; i < 4 + Math.round(6*s); i++){ const m = new THREE.Mesh(new THREE.TetrahedronGeometry(r*(.16 + .12*rr())), addMat(COLD, .45)); const a = rr()*Math.PI*2, e = (rr() - .5)*1.6, d = r*(1.5 + 1.2*s*rr()); m.position.set(Math.cos(a)*d, e*r, Math.sin(a)*d); g.add(m); } }
+    if (!w.void && (w.kind === "comet" || w.kind === "meteor")){ const len = r*(w.kind === "comet" ? 5 + 9*s : 3 + 6*s), cone = new THREE.Mesh(new THREE.ConeGeometry(r*(w.kind === "comet" ? .9 : .5), len, 16, 1, true), addMat(tint, .3)); cone.position.set(0, -len/2, 0); cone.rotation.z = Math.PI; g.add(cone); }
+    if (neg && !w.void){ const rr = rnd(hashStr(w.key || w.title)); for (let i = 0; i < 4 + Math.round(6*s); i++){ const m = new THREE.Mesh(new THREE.TetrahedronGeometry(r*(.18 + .15*rr())), addMat(COLD, .8)); const a = rr()*Math.PI*2, e = (rr() - .5)*1.6, d = r*(1.5 + 1.2*s*rr()); m.position.set(Math.cos(a)*d, e*r, Math.sin(a)*d); g.add(m); } }
     const hit = new THREE.Mesh(new THREE.SphereGeometry(Math.max(r*2.6, .1), 10, 8), new THREE.MeshBasicMaterial({visible:false})); hit.userData.item = null; g.add(hit);
     if (!w.void) stems.push(p.x, p.y - r, p.z, p.x, 0, p.z);
     const it = {w, g, sphere, halo, hit, r, s, neg, col:"#" + col.getHexString(), styles:sts.map(n => ({name:n, color:colorOf(n)})), spin:(rnd(hashStr(w.title))() - .5)*.6};
@@ -200,11 +199,11 @@ async function startAR(payload){
   camera = new THREE.Camera(); scene.add(camera);
   srcAR = new THREEx.ArToolkitSource({sourceType:"webcam", sourceWidth:1280, sourceHeight:960, displayWidth:innerWidth, displayHeight:innerHeight});
   await new Promise((res, rej) => srcAR.init(() => { setTimeout(res, 400); }, err => rej(err)));
-  ctxAR = new THREEx.ArToolkitContext({cameraParametersUrl:"data/camera_para.dat", detectionMode:"mono", patternRatio:MARKER.RATIO, maxDetectionRate:30, canvasWidth:640, canvasHeight:480});
+  ctxAR = new THREEx.ArToolkitContext({cameraParametersUrl:"data/camera_para.dat", detectionMode:"mono", patternRatio:MARKER.RATIO, maxDetectionRate:60, canvasWidth:640, canvasHeight:480});
   await new Promise(res => ctxAR.init(() => { camera.projectionMatrix.copy(ctxAR.getProjectionMatrix()); res(); }));
   markerRoot = new THREE.Group(); scene.add(markerRoot);
   const patt = URL.createObjectURL(new Blob([MARKER.patt(MARKER.url())], {type:"text/plain"}));
-  new THREEx.ArMarkerControls(ctxAR, markerRoot, {type:"pattern", patternUrl:patt, changeMatrixMode:"modelViewMatrix", smooth:true, smoothCount:6, smoothTolerance:.01, smoothThreshold:2, minConfidence:.45});
+  new THREEx.ArMarkerControls(ctxAR, markerRoot, {type:"pattern", patternUrl:patt, changeMatrixMode:"modelViewMatrix", smooth:false, minConfidence:.5});   // raw readings: the steadying happens in PIN below
   anchor.matrixAutoUpdate = false; anchor.visible = false;
   const fit = () => { srcAR.onResizeElement(); srcAR.copyElementSizeTo(renderer.domElement); if (ctxAR.arController) srcAR.copyElementSizeTo(ctxAR.arController.canvas); };
   addEventListener("resize", () => setTimeout(fit, 200)); setTimeout(fit, 300); setTimeout(fit, 1500);
@@ -219,29 +218,82 @@ async function startPreview(payload){
   addEventListener("resize", () => { renderer.setSize(innerWidth, innerHeight); camera.aspect = innerWidth/innerHeight; camera.updateProjectionMatrix(); });
   mode = "preview"; orbit.apply(); await populate(payload);
 }
-const orbit = {az:.35, el:.55, dist:8.5, apply(){ camera.position.set(Math.sin(this.az)*Math.cos(this.el)*this.dist, 1.1 + Math.sin(this.el)*this.dist, Math.cos(this.az)*Math.cos(this.el)*this.dist); camera.lookAt(0, 1.1, 0); }};
+const orbit = {az:.6, el:.62, dist:6.5, apply(){ camera.position.set(Math.sin(this.az)*Math.cos(this.el)*this.dist, 1.1 + Math.sin(this.el)*this.dist, Math.cos(this.az)*Math.cos(this.el)*this.dist); camera.lookAt(0, 1.1, 0); }};
 async function populate(payload){
   H = await buildHolo(payload);
-  anchor.add(H.holo); H.holo.scale.setScalar(START_SCALE);
+  anchor.add(H.holo);
   reticle = new THREE.Sprite(spriteMat(TEX.reticle, HOLO, .9)); reticle.visible = false; reticle.renderOrder = 19; H.holo.add(reticle);
   $("hud").hidden = false; $("hint").hidden = false; setTimeout(() => $("hint").style.opacity = "0", 9000);
   if (mode === "preview") setStatus(true, "On-screen view · drag to turn");
   renderer.setAnimationLoop(frame);
 }
+/* ---------- pinning the hologram in the room ----------
+   The square sets where the hologram stands; after that it is held in place by the phone's motion sensors, so turning
+   the phone doesn't drag it along, and it stays put when the square leaves the picture. Each new sighting of the square
+   only nudges it: small wobbles are ignored, steady small differences ease it over, and a big move is accepted only
+   when the square is seen clearly and the same way for a run of frames (the "extremely sure" case). */
+const GYRO = {q:new THREE.Quaternion(), ok:false, on:false};
+(function(){
+  const zee = new THREE.Vector3(0, 0, 1), eul = new THREE.Euler(), q0 = new THREE.Quaternion(), q1 = new THREE.Quaternion(-Math.sqrt(.5), 0, 0, Math.sqrt(.5)), d2r = Math.PI/180;
+  GYRO.read = e => {
+    if (e.alpha == null || e.beta == null) return;
+    const orient = ((screen.orientation && screen.orientation.angle) || window.orientation || 0)*d2r;
+    eul.set(e.beta*d2r, e.alpha*d2r, -e.gamma*d2r, "YXZ"); GYRO.q.setFromEuler(eul); GYRO.q.multiply(q1); GYRO.q.multiply(q0.setFromAxisAngle(zee, -orient)); GYRO.ok = true;
+  };
+  // iPhone asks permission for the motion sensors; it must be asked from the tap that starts the camera
+  GYRO.ask = () => {
+    const D = window.DeviceOrientationEvent; if (!D) return Promise.resolve(false);
+    const listen = () => { if (!GYRO.on){ addEventListener("deviceorientation", GYRO.read, true); GYRO.on = true; } return true; };
+    if (typeof D.requestPermission === "function") return D.requestPermission().then(r => r === "granted" ? listen() : false).catch(() => false);
+    return Promise.resolve(listen());
+  };
+})();
+const PIN = {
+  has:false, p:new THREE.Vector3(), r:new THREE.Quaternion(),       // where the hologram stands, in the room (phone-turn-free frame)
+  cand:[], lastGood:0,
+  reset(){ this.has = false; this.cand = []; },
+  // a reading of the square: its pose relative to the camera, turned into the room frame with the phone's current turn
+  see(m, now){
+    const pc = new THREE.Vector3(), rc = new THREE.Quaternion(), sc = new THREE.Vector3(); m.decompose(pc, rc, sc);
+    const gq = GYRO.ok ? GYRO.q : new THREE.Quaternion();
+    const pw = pc.clone().applyQuaternion(gq), rw = gq.clone().multiply(rc);
+    // how clear the view is: close and face-on is good, far or glancing is poor
+    const dist = pc.length(), up = new THREE.Vector3(0, 1, 0).applyQuaternion(rc), facing = Math.abs(up.dot(pc.clone().normalize()));
+    const q = clamp(1.6 - dist/6, 0, 1)*clamp((facing - .25)/.5, 0, 1);
+    if (!this.has){ this.cand.push({pw, rw, q}); if (this.cand.length > 8) this.cand.shift(); if (this.steady(6, .12) && q > .2) this.take(); return; }
+    const dp = pw.distanceTo(this.p), da = rw.angleTo(this.r)*180/Math.PI;
+    if (dp < .06 && da < 4){ this.blend(pw, rw, .025*q); this.cand = []; return; }          // a wobble: barely move
+    if (dp < .35 && da < 15){ this.blend(pw, rw, (GYRO.ok ? .07 : .2)*q); this.cand = []; return; }   // a steady small difference: ease over
+    // a big jump: only once it's seen clearly and the same way for ten frames in a row
+    this.cand.push({pw, rw, q}); if (this.cand.length > 10) this.cand.shift();
+    if (this.steady(10, .1) && this.cand.every(c => c.q > .35)) this.take();
+  },
+  steady(n, tol){ const c = this.cand; if (c.length < n) return false; const a = c.slice(-n); return a.every(x => x.pw.distanceTo(a[0].pw) < tol && x.rw.angleTo(a[0].rw) < .12); },
+  take(){ const a = this.cand, p = new THREE.Vector3(); a.forEach(c => p.add(c.pw)); this.p.copy(p.multiplyScalar(1/a.length)); this.r.copy(a[a.length-1].rw); this.has = true; this.cand = []; },
+  blend(pw, rw, k){ this.p.lerp(pw, k); this.r.slerp(rw, k); },
+  // where to draw it this frame: the room pose seen from the phone's current turn
+  apply(target){ const inv = (GYRO.ok ? GYRO.q : new THREE.Quaternion()).clone().invert(); target.compose(this.p.clone().applyQuaternion(inv), inv.multiply(this.r), new THREE.Vector3(1, 1, 1)); }
+};
+if (/[?&]debug\b/.test(location.search)) window.__AR = {PIN, anchor:() => anchor, raw:() => markerRoot};   // for checking the tracking
 function setStatus(lock, text){ $("status").classList.toggle("lock", !!lock); $("status").querySelector("span").textContent = text; }
 function frame(){
   const dt = Math.min(clock.getDelta(), .1), t = clock.elapsedTime; UNI.time.value = t;
   if (mode === "ar" && srcAR.ready !== false){
     ctxAR.update(srcAR.domElement);
-    if (markerRoot.visible){ anchor.matrix.copy(markerRoot.matrix); anchor.visible = true; if (!lastSeen || performance.now() - lastSeen > 600) setStatus(true, "Locked on the square"); lastSeen = performance.now(); }
-    else if (lastSeen && performance.now() - lastSeen > 700){ setStatus(false, "Bring the square back into view"); }
-    const lost = lastSeen ? performance.now() - lastSeen : 1e9;
-    UNI.fade.value += ((lost < 700 ? 1 : .35) - UNI.fade.value)*.08;
+    const now = performance.now();
+    if (markerRoot.visible){ PIN.see(markerRoot.matrix, now); lastSeen = now; }
+    if (PIN.has){ PIN.apply(anchor.matrix); anchor.matrixWorldNeedsUpdate = true; anchor.visible = true; }
+    const lost = lastSeen ? now - lastSeen : 1e9;
+    const st = !PIN.has ? (markerRoot.visible ? "Hold steady on the square…" : "Looking for the square…") : lost < 500 ? "Pinned to the square" : GYRO.ok ? "Pinned · walk around it" : "Bring the square back into view";
+    if (st !== frame.st){ frame.st = st; setStatus(PIN.has && (lost < 500 || GYRO.ok), st); }
+    // without motion sensors the hologram can't hold its place, so it dims while the square is out of sight
+    UNI.fade.value += ((!PIN.has ? 0 : (lost < 700 || GYRO.ok) ? 1 : .35) - UNI.fade.value)*.08;
   }
   if (H){
     H.spin.rotation.y += dt*.15;
     H.items.forEach(it => { it.sphere.rotation.y += dt*it.spin; it.halo.material.opacity = it.halo.material.opacity*.98 + (.18 + .7*it.s)*(.9 + .1*Math.sin(t*2 + it.r*400))*.02; });
     if (selected){ reticle.position.copy(selected.g.position); reticle.scale.setScalar(selected.r*6); reticle.material.rotation = t*.8; }
+    H.holo.traverse(o => { if (o.material && o.material.opacity !== undefined && o.material.blending === THREE.AdditiveBlending && o.userData.base === undefined) o.userData.base = o.material.opacity; });
   }
   renderer.render(scene, camera);
 }
@@ -334,7 +386,8 @@ addEventListener("DOMContentLoaded", async () => {
     try {
       if (ar){
         if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) throw new Error("This browser can't open the camera here. Open the page from its https address in Safari (iPhone) or Chrome (Android).");
-        $("start").style.display = "none"; await startAR(PAYLOAD);
+        const gyro = GYRO.ask();   // asked first, inside the tap, as iPhone requires
+        $("start").style.display = "none"; await gyro; await startAR(PAYLOAD);
       } else { $("start").style.display = "none"; await startPreview(PAYLOAD); }
     } catch(e){ $("start").style.display = ""; msg.textContent = "The camera didn't start: " + (e && (e.message || e.name) || e) + ". Allow camera access for this site and try again."; }
   };
@@ -342,7 +395,7 @@ addEventListener("DOMContentLoaded", async () => {
   $("goPreview").addEventListener("click", () => go(false));
   $("cardX").addEventListener("click", closeCard);
   $("bHelp").addEventListener("click", () => $("help").classList.add("on"));
-  $("bReset").addEventListener("click", () => { if (!H) return; H.holo.position.set(0, 0, 0); H.holo.scale.setScalar(START_SCALE); H.holo.rotation.set(0, 0, 0); if (mode === "preview"){ orbit.az = .35; orbit.el = .55; orbit.dist = 8.5; orbit.apply(); } });
+  $("bReset").addEventListener("click", () => { if (!H) return; PIN.reset(); H.holo.position.set(0, 0, 0); H.holo.scale.setScalar(1); H.holo.rotation.set(0, 0, 0); if (mode === "preview"){ orbit.az = .6; orbit.el = .62; orbit.dist = 6.5; orbit.apply(); } });
   $("bLabels").addEventListener("click", () => {
     if (!H) return; labelsOn = !labelsOn; $("bLabels").setAttribute("aria-pressed", String(labelsOn));
     H.items.forEach(it => { if (labelsOn && !it.label){ it.label = labelSprite(it.w.title, isFinite(it.w.year) && !it.w.noYear ? String(it.w.year) : "", it.col); it.label.position.y = it.r*1.6; it.label.scale.multiplyScalar(.8); it.g.add(it.label); } if (it.label) it.label.visible = labelsOn || it === selected; });

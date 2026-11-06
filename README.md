@@ -30,7 +30,9 @@ The buttons along the top:
 - **Reset** puts the atlas back on the square at its starting size.
 - **?** shows these instructions.
 
-Keep the square in view. If it leaves the picture, the hologram dims and waits until the square is back.
+**How it stays put:** hold the square in view for a moment and the hologram is set down on it. From then on the phone's motion sensors hold it in place, so turning the phone doesn't drag it, and it stays where it is when the square leaves the picture. Each new sighting of the square only nudges it: small wobbles are ignored and steady small differences are eased out. It jumps to a new spot only when it sees the square clearly and the same way for about half a second. On iPhone, allow **Motion & Orientation** access when asked, as well as the camera.
+
+Phone browsers can track how the phone *turns* but not how far it *moves*. Walking a long way around can let the hologram slide a little, until the square comes back into view and it re-settles. Apps like Fologram use the phone's full room tracking (ARKit/ARCore), which Safari doesn't give to web pages.
 
 ## Set it up on GitHub (free)
 
