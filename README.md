@@ -19,7 +19,7 @@ This is a separate site. It changes nothing in the atlas, its PDFs or its shared
 **Stand it in your room**: the smooth, Fologram-like way. Your phone's own room tracking (ARKit or ARCore) holds the atlas still while you walk around it, or pinch it huge and stand inside it.
 
 - **Android (Chrome):** opens right in the page. Move the phone slowly so it finds the floor. Put the ring on the printed square and tap: the atlas is set down there, facing you. Drag, pinch, twist and tap a world for its card, all inside the camera view. **Reset** lets you set it down again.
-- **iPhone (Safari):** Safari doesn't give web pages room tracking, so the page builds the atlas into a 3D model and hands it to Apple's AR viewer, the same system Fologram uses. Aim at the square on the floor and it settles there. Pinch to scale, drag to move, and walk around and inside it. Every world carries its name, but Apple's viewer can't open cards. Tap **Done** to come back to the page.
+- **iPhone (Safari):** Safari doesn't give web pages room tracking, so the page builds the atlas into a 3D model and hands it to Apple's AR viewer, the same system Fologram uses. Aim at the square on the floor and it settles there. Pinch to scale, drag to move, and walk around and inside it. Names and cards turn to face you. Tap a world to open its card (photo, rating, designer, year, place, styles, caption, notes), and tap the card to close it. Tap **Done** to come back to the page. If Apple's viewer won't open the tappable version, use **Plain room view** under it.
 
 **Pin it to the square**: the camera finds the printed square and stands the atlas on it, on any phone. Tap a world for its full card with photos and notes. Phone browsers can track the phone turning but not walking, so the motion sensors hold the atlas for a few seconds when the square leaves the picture, then it fades until you aim back at the square.
 
@@ -113,7 +113,7 @@ The printed square keeps working. Reprint it only if the site moves to a new add
 | `config.js` | Settings |
 | `lib/three.min.js` | Three.js r147, the 3D library the atlas uses |
 | `lib/ar-threex.js` | AR.js 3.4, marker tracking that works in iPhone and Android browsers |
-| `lib/usdz-exporter.js` | Three.js's USDZ exporter, which builds the model for Apple's AR viewer |
+| `lib/usdz-exporter.js` | Three.js's USDZ exporter, which builds the model for Apple's AR viewer (with a small change that adds Apple's tap behaviours) |
 | `lib/qrcode.js` | Makes the QR code |
 | `lib/coast.js` | The coastlines |
 | `data/camera_para.dat` | AR.js's standard camera settings |

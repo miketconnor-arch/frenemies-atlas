@@ -157,7 +157,7 @@ async function buildHolo(payload){
   const spots = new Map();
   real.forEach(w => { const key = Math.round(X(L(w))*25) + "," + Math.round(Z(w.lat)*25) + "," + Math.round(Y(w.year)*25); (spots.get(key) || spots.set(key, []).get(key)).push(w); });
   const pos = new Map();
-  spots.forEach(list => list.forEach((w, i) => { const n = list.length, a = i/n*Math.PI*2, rr = n > 1 ? .07*Math.sqrt(n) : 0; pos.set(w, new THREE.Vector3(X(L(w)) + Math.cos(a)*rr, Y(w.year), Z(w.lat) + Math.sin(a)*rr)); }));
+  spots.forEach(list => list.forEach((w, i) => { const n = list.length, a = i/n*Math.PI*2, rr = n > 1 ? .11*Math.sqrt(n) : 0; pos.set(w, new THREE.Vector3(X(L(w)) + Math.cos(a)*rr, Y(w.year), Z(w.lat) + Math.sin(a)*rr)); }));
   voids.forEach((w, i) => { const a = Math.PI*1.5 + (i + .5)/voids.length*Math.PI*2, rt = isFinite(w.rating) ? w.rating : 0; pos.set(w, new THREE.Vector3(Math.cos(a)*R0*1.16, Y0 + YH*(.5 + rt/24), Math.sin(a)*R0*1.16)); });
   const stems = [];
   await Promise.all(works.map(async w => {
@@ -281,6 +281,7 @@ const PIN = {
 if (/[?&]debug\b/.test(location.search)) window.__AR = {PIN, anchor:() => anchor, raw:() => markerRoot, buildHolo, buildUSDZ};   // for checking the tracking
 function setStatus(lock, text){ $("status").classList.toggle("lock", !!lock); $("status").querySelector("span").textContent = text; }
 function frame(time, xf){
+  frame.n = frame.n || 0;
   const dt = Math.min(clock.getDelta(), .1), t = clock.elapsedTime; UNI.time.value = t;
   if (mode === "xr" && xf) xrFrame(xf);
   if (mode === "ar" && srcAR.ready !== false){
@@ -298,6 +299,7 @@ function frame(time, xf){
   if (H){
     H.spin.rotation.y += dt*.15;
     H.items.forEach(it => { it.sphere.rotation.y += dt*it.spin; it.halo.material.opacity = it.halo.material.opacity*.98 + (.18 + .7*it.s)*(.9 + .1*Math.sin(t*2 + it.r*400))*.02; });
+    if (labelsOn || selected) declutter(++frame.n % 6 === 0);
     if (selected){ reticle.position.copy(selected.g.position); reticle.scale.setScalar(selected.r*6); reticle.material.rotation = t*.8; }
   }
   renderer.render(scene, camera);
@@ -354,13 +356,68 @@ function labelCanvas(text, sub, color){
   if (sub){ g.font = (fs*.62) + "px Tahoma, Verdana, sans-serif"; g.fillStyle = "#9fd6ea"; g.fillText(sub, pad, pad*.6 + fs*1.15); }
   return c;
 }
-async function buildUSDZ(Hh){
+function wrapLines(g, text, maxW, maxLines){
+  const words = String(text || "").split(/\s+/).filter(Boolean), out = []; let cur = "";
+  words.forEach(w => { const t = cur ? cur + " " + w : w; if (!cur || g.measureText(t).width <= maxW) cur = t; else { out.push(cur); cur = w; } });
+  if (cur) out.push(cur);
+  if (out.length > maxLines){ out.length = maxLines; let l = out[maxLines - 1]; while (l && g.measureText(l + "…").width > maxW) l = l.slice(0, -1); out[maxLines - 1] = l + "…"; }
+  return out;
+}
+function loadImg(url){ return new Promise(res => { if (!url) return res(null); const i = new Image(); i.onload = () => res(i); i.onerror = () => res(null); i.src = url; }); }
+// the card shown in Apple's viewer when a world is tapped: photo, name, designer, year, place, styles, caption and notes
+async function cardCanvas(it){
+  const W = 760, pad = 34, w = it.w, img = await loadImg(w.photoUrl), c = document.createElement("canvas"), g = c.getContext("2d");
+  const rating = isFinite(w.rating) && w.rating !== null ? +w.rating : null, rate = rating === null ? "Unrated" : (rating > 0 ? "+" : "−") + Math.abs(rating);
+  const kind = w.void ? (rating !== null && rating < 0 ? "Black hole" : "Supernova") + " · no single date or place" : (BODY[w.kind] || "Star") + " · " + (w.type || KIND[w.kind] || "");
+  const F = (sz, it2) => (it2 ? "italic " : "") + sz + "px Tahoma, Verdana, sans-serif";
+  g.font = F(40); const tl = wrapLines(g, w.title, W - pad*2, 3);
+  g.font = F(24); const notes = wrapLines(g, w.notes, W - pad*2, 11);
+  const cap = w.photoCaption && !/^n\.?\/?a\.?$/i.test(w.photoCaption) ? (g.font = F(20, 1), wrapLines(g, w.photoCaption, W - pad*2, 2)) : [];
+  const ph = img ? Math.round(W*.62) : 0;
+  const H = ph + (cap.length ? 14 + cap.length*26 : 0) + pad + 30 + tl.length*48 + 40 + 34 + (it.styles.length ? 48 : 0) + (notes.length ? 18 + notes.length*33 : 0) + 34 + pad;
+  c.width = W; c.height = H;
+  g.fillStyle = "#060b14"; g.fillRect(0, 0, W, H);
+  let y = 0;
+  if (img){ const k = Math.max(W/img.naturalWidth, ph/img.naturalHeight), iw = img.naturalWidth*k, ih = img.naturalHeight*k; g.save(); g.beginPath(); g.rect(0, 0, W, ph); g.clip(); g.drawImage(img, (W - iw)/2, (ph - ih)/2, iw, ih); g.restore(); y = ph; }
+  g.textBaseline = "top";
+  if (cap.length){ g.font = F(20, 1); g.fillStyle = "#8a97ad"; cap.forEach((l, i) => g.fillText(l, pad, y + 14 + i*26)); y += 14 + cap.length*26; }
+  y += pad;
+  g.font = F(19); g.fillStyle = "#7fe3ff"; g.fillText(kind.toUpperCase(), pad, y); y += 30;
+  g.font = F(40); g.fillStyle = "#f1f6ff"; tl.forEach(l => { g.fillText(l, pad, y); y += 48; });
+  y += 4; g.font = "bold " + F(26); g.fillStyle = rating !== null && rating < 0 ? "#9cc4ff" : it.col; g.fillText(rate, pad, y);
+  const rw = g.measureText(rate + "  ").width; g.font = F(26); g.fillStyle = "#c3cfdf"; g.fillText((w.artists || []).join(", ") + (w.noYear || !isFinite(w.year) ? " · Undated" : " · " + w.year), pad + rw, y); y += 36;
+  g.font = F(23); g.fillStyle = "#9fb0c6"; g.fillText(w.noPlace ? "No single place" : (w.place || ""), pad, y); y += 34;
+  if (it.styles.length){ let x = pad; y += 6; g.font = F(20); it.styles.forEach(st => { const tw = g.measureText(st.name).width + 26; if (x + tw > W - pad) return; g.strokeStyle = st.color; g.lineWidth = 2; g.beginPath(); g.roundRect ? g.roundRect(x, y, tw, 34, 17) : g.rect(x, y, tw, 34); g.stroke(); g.fillStyle = st.color; g.fillText(st.name, x + 13, y + 7); x += tw + 10; }); y += 42; }
+  if (notes.length){ y += 18; g.font = F(24); g.fillStyle = "#e3eaf5"; notes.forEach(l => { g.fillText(l, pad, y); y += 33; }); }
+  g.font = F(18); g.fillStyle = "#6f7d92"; g.fillText("Tap the card to close it", pad, H - pad - 14);
+  g.strokeStyle = it.col; g.lineWidth = 6; g.strokeRect(3, 3, W - 6, H - 6);
+  return c;
+}
+// labels in the model are lifted apart where they would collide, strongest feelings placed first
+function liftLabels(items, sizeOf){
+  const placed = [], out = new Map();
+  [...items].sort((a, b) => b.s - a.s).forEach(it => {
+    const p = it.g.position, {w, h} = sizeOf(it); let y = p.y + it.r*1.6 + h/2;
+    for (let k = 0; k < 40; k++){
+      const hit = placed.find(q => Math.abs(q.y - y) < (q.h + h)/2*1.05 && Math.hypot(q.x - p.x, q.z - p.z) < (q.w + w)/2*.75);
+      if (!hit) break; y = hit.y + (hit.h + h)/2*1.08;
+    }
+    placed.push({x:p.x, z:p.z, y, w, h}); out.set(it, y);
+  });
+  return out;
+}
+/* Builds the model for Apple's AR viewer. With interactive = true it adds Apple's tap behaviours (as Reality
+   Composer writes them): labels and cards turn to face you, and tapping a world opens its card. */
+async function buildUSDZ(Hh, interactive){
   const root = new THREE.Group(), U = XR_UNIT;
   const jpg = c => { const t = new THREE.CanvasTexture(c); t.format = 1022; return t; };   // saved as JPEG, keeps the model light
   const mat = (color, op, emis) => new THREE.MeshStandardMaterial({color:new THREE.Color(color).multiplyScalar(.25), emissive:new THREE.Color(emis || color), roughness:.7, metalness:0, transparent:op < 1, opacity:op});
   const pmat = tex => new THREE.MeshStandardMaterial({color:0xffffff, map:tex, emissiveMap:tex, emissive:new THREE.Color(0xffffff), roughness:.8, metalness:0});
+  // without behaviours a panel is printed on both faces; the back copy is turned about the vertical so it reads the right way round
+  const panel = (geo, m, setup) => { const a = new THREE.Mesh(geo, m); setup(a); if (interactive) return [a]; const b = new THREE.Mesh(geo, m); setup(b); b.rotateY(Math.PI); b.translateZ(.002); return [a, b]; };
   const twoSided = (geo, m, setup) => { const a = new THREE.Mesh(geo, m), b = new THREE.Mesh(geo, m); setup(a); setup(b); b.rotateX(Math.PI); return [a, b]; };
   const add = o => (Array.isArray(o) ? o : [o]).forEach(x => root.add(x));
+  const facing = [], cards = [], taps = [];
   // the projector rings on the floor
   [[R0*.995, R0*1.02, .95], [R0*.62, R0*.625, .4], [R0*.32, R0*.325, .35], [R0*1.16, R0*1.166, .45]].forEach(([a, b, op]) => { const m = new THREE.Mesh(new THREE.RingGeometry(a, b, 128), mat(HOLO, op)); m.rotation.x = -Math.PI/2; m.position.y = .002; add(m); });
   // coastlines as fine flat ribbons
@@ -370,12 +427,15 @@ async function buildUSDZ(Hh){
     pos.push(ax - nx, .004, az - nz, ax + nx, .004, az + nz, bx + nx, .004, bz + nz, bx - nx, .004, bz - nz);
     idx.push(k, k + 1, k + 2, k, k + 2, k + 3);   // wound to face up
   }
-  if (pos.length){ const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3)); g.setIndex(idx); g.computeVertexNormals(); g.setAttribute("normal", new THREE.Float32BufferAttribute(new Array(pos.length/3).fill(0).flatMap(() => [0, 1, 0]), 3)); g.setAttribute("uv", new THREE.Float32BufferAttribute(new Array(pos.length/3*2).fill(0), 2)); add(new THREE.Mesh(g, mat(HOLO, .8))); }
+  if (pos.length){ const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3)); g.setIndex(idx); g.setAttribute("normal", new THREE.Float32BufferAttribute(new Array(pos.length/3).fill(0).flatMap(() => [0, 1, 0]), 3)); g.setAttribute("uv", new THREE.Float32BufferAttribute(new Array(pos.length/3*2).fill(0), 2)); add(new THREE.Mesh(g, mat(HOLO, .8))); }
   // the time pillar and its years
   const P = Hh.pillar, pil = new THREE.Mesh(new THREE.CylinderGeometry(.008, .008, P.top, 6), mat(HOLO, .9)); pil.position.set(P.x, P.top/2, P.z); add(pil);
   let lastY = -1; P.marks.forEach(([y, h]) => { if (h - lastY < .09) return; lastY = h; const c = labelCanvas(String(y), "", "#7fe3ff"), t = jpg(c), hh = .07, ww = hh*c.width/c.height;
-    add(twoSided(new THREE.PlaneGeometry(ww, hh), pmat(t), m => m.position.set(P.x - ww/2 - .03, h, P.z))); });
-  // the works, each with its photo, glow, rings or tail, a stem to the map and its name
+    const ms = panel(new THREE.PlaneGeometry(ww, hh), pmat(t), m => m.position.set(P.x - ww/2 - .03, h, P.z)); add(ms); facing.push(...ms); });
+  // the labels, measured first so they can be lifted apart
+  const LH = .11, lab = new Map(Hh.items.map(it => { const c = labelCanvas(it.w.title, (it.w.artists || []).join(", ") + (isFinite(it.w.year) && !it.w.noYear ? " · " + it.w.year : ""), it.col); return [it, {c, h:LH, w:LH*c.width/c.height}]; }));
+  const ly = liftLabels(Hh.items, it => lab.get(it));
+  // the works, each with its photo, glow, rings or tail, a stem to the map, its name and its card
   for (const it of Hh.items){
     const p = it.g.position, r = it.r, s = it.s, col = it.neg ? COLD : new THREE.Color(it.col), w = it.w, black = w.void && it.neg;
     let tex = null;
@@ -392,22 +452,80 @@ async function buildUSDZ(Hh){
     if (!w.void && (w.kind === "comet" || w.kind === "meteor")){ const len = r*(w.kind === "comet" ? 5 + 9*s : 3 + 6*s), cone = new THREE.Mesh(new THREE.ConeGeometry(r*(w.kind === "comet" ? .75 : .45), len, 14), mat(col, .25 + .2*s)); cone.position.set(p.x, p.y - len/2, p.z); cone.rotation.z = Math.PI; add(cone); }
     if (it.neg && !w.void){ const rr = rnd(hashStr(w.key || w.title)); for (let i = 0; i < 4 + Math.round(6*s); i++){ const m = new THREE.Mesh(new THREE.TetrahedronGeometry(r*(.16 + .12*rr())), mat(COLD, .8)); const a = rr()*Math.PI*2, e = (rr() - .5)*1.6, d = r*(1.5 + 1.2*s*rr()); m.position.set(p.x + Math.cos(a)*d, p.y + e*r, p.z + Math.sin(a)*d); add(m); } }
     if (!w.void && p.y - r > .01){ const st = new THREE.Mesh(new THREE.CylinderGeometry(.0035, .0035, p.y - r, 4), mat(HOLO, .45)); st.position.set(p.x, (p.y - r)/2, p.z); add(st); }
-    const c = labelCanvas(w.title, (w.artists || []).join(", ") + (isFinite(w.year) && !w.noYear ? " · " + w.year : ""), it.col), hh = .11, ww = hh*c.width/c.height;
-    add(twoSided(new THREE.PlaneGeometry(ww, hh), pmat(jpg(c)), m => m.position.set(p.x + ww/2 - .02, p.y + r*1.6 + hh/2, p.z)));
+    const L0 = lab.get(it), y0 = ly.get(it);
+    if (y0 - L0.h/2 > p.y + r*1.7){ const tie = new THREE.Mesh(new THREE.CylinderGeometry(.002, .002, y0 - L0.h/2 - p.y - r, 4), mat(it.col, .5)); tie.position.set(p.x, (y0 - L0.h/2 + p.y + r)/2, p.z); add(tie); }
+    const lm = panel(new THREE.PlaneGeometry(L0.w, L0.h), pmat(jpg(L0.c)), m => m.position.set(p.x, y0, p.z)); add(lm); facing.push(...lm);
+    if (interactive){
+      const cc = await cardCanvas(it), cw = 1.5, ch = cw*cc.height/cc.width;
+      const card = new THREE.Mesh(new THREE.PlaneGeometry(cw, ch), pmat(jpg(cc)));
+      card.position.set(p.x, y0 - L0.h/2 + ch/2, p.z); add(card);   // opens over the world's name, its foot where the name sits
+      facing.push(card); cards.push(card); taps.push({on:[sph, halo], card});
+    }
   }
   // references: thin glowing tubes along the same arcs
   Hh.links.forEach(([a, b]) => { const p0 = a.g.position, p1 = b.g.position, mid = p0.clone().add(p1).multiplyScalar(.5); mid.y += p0.distanceTo(p1)*.25;
     add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.QuadraticBezierCurve3(p0.clone(), mid, p1.clone()), 24, .006, 5), mat(a.col, .7))); });
   root.scale.setScalar(U);
   const sc = new THREE.Scene(); sc.add(root); sc.updateMatrixWorld(true);
-  const data = await new USDZExporter().parse(sc);
+  const options = {ar:{anchoring:{type:"plane"}, planeAnchoring:{alignment:"horizontal"}}};
+  if (interactive) options.sceneExtra = quickLookBehaviours(facing, cards, taps);
+  const data = await new USDZExporter().parse(sc, options);
   return URL.createObjectURL(new Blob([data], {type:"model/vnd.usdz+zip"}));
+}
+/* Apple's AR Quick Look reads the same tap behaviours Reality Composer writes into a USDZ file:
+   at the start, hide every card and turn every label and card to face you; tapping a world shows its card, tapping the card hides it. */
+function quickLookBehaviours(facing, cards, taps){
+  const S = "/Root/Scenes/Scene/", P = o => "<" + S + "Object_" + o.id + ">", L = a => "[ " + a.map(P).join(", ") + " ]";
+  const beh = (name, trig, act) => `
+        def Preliminary_Behavior "${name}"
+        {
+            rel actions = <${S}${name}/Action>
+            uniform bool exclusive = 0
+            rel triggers = <${S}${name}/Trigger>
+
+            def Preliminary_Trigger "Trigger"
+            {
+${trig}
+            }
+
+            def Preliminary_Action "Action"
+            {
+${act}
+            }
+        }
+`;
+  const enter = `                token info:id = "SceneTransition"\n                token type = "enter"`;
+  const tap = objs => `                rel affectedObjects = ${L(objs)}\n                token info:id = "TapGesture"`;
+  const vis = (objs, show, dur) => `                rel affectedObjects = ${L(objs)}\n                double duration = ${dur}\n                token easeType = "none"\n                token info:id = "Visibility"\n                token motionType = "none"\n                double moveDistance = 0\n                token style = "basic"\n                token type = "${show ? "show" : "hide"}"`;
+  const look = objs => `                rel affectedObjects = ${L(objs)}\n                double duration = 9999999999\n                vector3d front = (0, 0, 1)\n                token info:id = "LookAtCamera"\n                vector3d upVector = (0, 1, 0)`;
+  let out = "";
+  if (cards.length) out += beh("StartHideCards", enter, vis(cards, false, 0));
+  if (facing.length) out += beh("StartFaceViewer", enter, look(facing));
+  taps.forEach((t, i) => { out += beh("Open_" + i, tap(t.on), vis([t.card], true, .25)); out += beh("Close_" + i, tap([t.card]), vis([t.card], false, .2)); });
+  return out;
 }
 function buttonImage(text){
   const c = document.createElement("canvas"), sc = 2; c.width = 680*sc; c.height = 96*sc; const g = c.getContext("2d"); g.scale(sc, sc);
   g.fillStyle = "rgba(127,227,255,.16)"; g.strokeStyle = "#7fe3ff"; g.lineWidth = 2; g.beginPath(); g.roundRect ? g.roundRect(2, 2, 676, 92, 46) : g.rect(2, 2, 676, 92); g.fill(); g.stroke();
   g.fillStyle = "#e8eef8"; g.font = "30px Tahoma, Verdana, sans-serif"; g.textAlign = "center"; g.textBaseline = "middle"; g.fillText(text, 340, 49);
   return c.toDataURL("image/png");
+}
+
+/* ---------- names that would overlap fade back; the tapped world and the strongest feelings stay clear ---------- */
+function declutter(measure){
+  const cam = mode === "xr" ? renderer.xr.getCamera() : camera;
+  if (measure){
+    const shown = H.items.filter(it => it.label && it.label.visible), kept = [], v = new THREE.Vector3(), u = new THREE.Vector3();
+    shown.sort((a, b) => (b === selected) - (a === selected) || b.s - a.s).forEach(it => {
+      it.label.getWorldPosition(v); const d = v.distanceTo(new THREE.Vector3().setFromMatrixPosition(cam.matrixWorld));
+      u.copy(v); u.project(cam.isArrayCamera ? cam.cameras[0] || cam : cam); const ws = new THREE.Vector3(); it.label.getWorldScale(ws);
+      const h = ws.y/Math.max(d, .01)*innerHeight*1.2, w = h*it.label.scale.x/it.label.scale.y, x = (u.x*.5 + .5)*innerWidth, y = (-u.y*.5 + .5)*innerHeight;
+      const box = {x0:x, x1:x + w, y0:y - h, y1:y}, behind = u.z > 1;
+      const clash = behind || kept.some(k => box.x0 < k.x1 && box.x1 > k.x0 && box.y0 < k.y1 && box.y1 > k.y0);
+      it.labelTarget = it === selected ? .95 : clash ? .1 : .9; if (!clash) kept.push(box);
+    });
+  }
+  H.items.forEach(it => { if (it.label && it.labelTarget !== undefined) it.label.material.opacity += (it.labelTarget - it.label.material.opacity)*.2; });
 }
 
 /* ---------- touch: tap to pick, drag to move, pinch to scale, twist to turn ---------- */
@@ -523,9 +641,11 @@ addEventListener("DOMContentLoaded", async () => {
   } else if (PAYLOAD && qlOK){
     $("roomRow").hidden = false; $("roomNote").textContent = "Preparing the room view…";
     try {
-      const H0 = await buildHolo(PAYLOAD), url = await buildUSDZ(H0);
+      const H0 = await buildHolo(PAYLOAD), url = await buildUSDZ(H0, true);
       ql.href = url; ql.innerHTML = '<img src="' + buttonImage("Stand it in your room") + '" alt="Stand it in your room">'; ql.hidden = false;
-      $("roomNote").textContent = "Opens in Apple's AR viewer, which tracks the room the way Fologram does. Aim at the printed square on the floor and it settles there; pinch to make it huge, then walk around and inside it. Each world shows its name; for photos and full cards, use Pin it to the square.";
+      $("roomNote").textContent = "Opens in Apple's AR viewer, which tracks the room the way Fologram does. Aim at the printed square on the floor and it settles there; pinch to make it huge, then walk around and inside it. Names turn to face you; tap a world to open its card, tap the card to close it.";
+      // a plain model too, without tap behaviours, in case this iPhone's viewer won't open the other
+      buildUSDZ(H0, false).then(u => { const a = $("qlPlain"); a.href = u; a.innerHTML = '<img src="' + buttonImage("Plain room view (no tapping)") + '" alt="Plain room view">'; $("qlPlainRow").hidden = false; }).catch(() => {});
     } catch(e){ $("roomNote").textContent = "The room view couldn't be prepared on this phone (" + (e.message || e) + ")."; }
   }
   $("goPreview").addEventListener("click", () => go(false));

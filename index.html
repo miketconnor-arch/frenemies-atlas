@@ -26,6 +26,7 @@
   .quiet{display:block;width:100%;padding:12px 18px;margin:0 0 8px;border:1px solid rgba(255,255,255,.18);background:transparent;border-radius:28px;color:var(--ink2);font-size:14px}
   #start a{color:var(--ink3);font-size:13px}
   #ql{display:block;margin:0 0 10px} #ql img{display:block;width:100%;height:auto}
+  #qlPlain{display:block;margin:-6px auto 18px;width:70%;opacity:.8} #qlPlain img{display:block;width:100%;height:auto}
   .note{font-size:12.5px!important;color:var(--ink3)!important;margin:-2px 0 16px!important;line-height:1.5!important}
   #roomRow + .go{background:transparent;border-color:rgba(255,255,255,.25);font-size:14px;padding:12px 18px}
   #ui{position:fixed;inset:0;z-index:4;pointer-events:none}
@@ -83,6 +84,7 @@
     <a id="ql" rel="ar" hidden></a>
     <button class="go" id="goXR" hidden>Stand it in your room</button>
     <p class="note" id="roomNote"></p>
+    <div id="qlPlainRow" hidden><a id="qlPlain" rel="ar"></a></div>
   </div>
   <button class="go" id="goCam">Pin it to the square</button>
   <button class="quiet" id="goPreview">Look without the camera</button>
