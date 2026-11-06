@@ -561,13 +561,13 @@ ${body}
   return out;
 }
 function buttonImage(title, tag, sub){
-  const W = 760, Hh = 132, sc = 2, c = document.createElement("canvas"); c.width = W*sc; c.height = Hh*sc; const g = c.getContext("2d"); g.scale(sc, sc);
+  const W = 760, Hh = sub ? 132 : 92, sc = 2, c = document.createElement("canvas"); c.width = W*sc; c.height = Hh*sc; const g = c.getContext("2d"); g.scale(sc, sc);
   const rr = (x, y, w, h, r) => { g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath(); };
   rr(1.5, 1.5, W - 3, Hh - 3, 26); g.fillStyle = "rgba(127,227,255,.12)"; g.fill(); g.strokeStyle = "#7fe3ff"; g.lineWidth = 2; g.stroke();
-  g.textBaseline = "middle"; g.fillStyle = "#e8eef8"; g.font = "30px Tahoma, Verdana, sans-serif"; g.fillText(title, 28, 46);
-  g.font = "19px Tahoma, Verdana, sans-serif"; const tw = g.measureText(tag.toUpperCase()).width + 26; rr(W - 28 - tw, 28, tw, 36, 16); g.strokeStyle = "rgba(127,227,255,.4)"; g.lineWidth = 1.5; g.stroke();
-  g.fillStyle = "#7fe3ff"; g.fillText(tag.toUpperCase(), W - 28 - tw + 13, 47);
-  g.font = "21px Tahoma, Verdana, sans-serif"; g.fillStyle = "#7d8aa0"; g.fillText(sub, 28, 96);
+  g.textBaseline = "middle"; g.fillStyle = "#e8eef8"; g.font = "30px Tahoma, Verdana, sans-serif"; g.fillText(title, 28, sub ? 46 : Hh/2 + 1);
+  g.font = "19px Tahoma, Verdana, sans-serif"; const tw = g.measureText(tag.toUpperCase()).width + 26; const ty = sub ? 28 : Hh/2 - 18; rr(W - 28 - tw, ty, tw, 36, 16); g.strokeStyle = "rgba(127,227,255,.4)"; g.lineWidth = 1.5; g.stroke();
+  g.fillStyle = "#7fe3ff"; g.fillText(tag.toUpperCase(), W - 28 - tw + 13, ty + 19);
+  if (sub){ g.font = "21px Tahoma, Verdana, sans-serif"; g.fillStyle = "#7d8aa0"; g.fillText(sub, 28, 96); }
   return c.toDataURL("image/png");
 }
 
@@ -711,7 +711,8 @@ function closeCard(){ if (SHEET.state !== "closed") SHEET.set("closed"); selecte
 let PAYLOAD = null;
 addEventListener("DOMContentLoaded", async () => {
   const msg = $("msg");
-  try { PAYLOAD = await loadAtlas(); const t = (PAYLOAD.share && PAYLOAD.share.title) || window.AR_TITLE; if (t){ $("title").textContent = t; document.title = t + " · Hologram"; } }
+  try { PAYLOAD = await loadAtlas(); const t = (PAYLOAD.share && PAYLOAD.share.title) || window.AR_TITLE; if (t){ $("title").textContent = t; document.title = t + " · Hologram"; }
+    const intro = PAYLOAD.share && String(PAYLOAD.share.intro || "").trim(); if (intro) $("intro").textContent = intro; }   // your own description from Save a copy to share
   catch(e){ msg.textContent = e.message; }
   const go = async ar => {
     if (!PAYLOAD){ msg.textContent = msg.textContent || "The atlas file hasn't loaded."; return; }
@@ -740,10 +741,10 @@ addEventListener("DOMContentLoaded", async () => {
     $("roomNote").textContent = "Preparing the room view…";
     try {
       const H0 = await buildHolo(PAYLOAD), url = await buildUSDZ(H0, true);
-      ql.href = url; ql.innerHTML = '<img src="' + buttonImage("Room view", "iPhone only", "Apple's AR viewer: walk around and inside it; cards open in the scene") + '" alt="Room view, iPhone only">'; ql.hidden = false;
+      ql.href = url; ql.innerHTML = '<img src="' + buttonImage("Room view", "iOS") + '" alt="Room view, iOS">'; ql.hidden = false;
       $("roomNote").textContent = "";
       // a plain model too, without tap behaviours, in case this iPhone's viewer won't open the other
-      buildUSDZ(H0, false).then(u => { const a = $("qlPlain"); a.href = u; a.innerHTML = '<img src="' + buttonImage("Plain room view", "iPhone only", "If the room view won't open: no tapping") + '" alt="Plain room view">'; $("qlPlainRow").hidden = false; }).catch(() => {});
+      buildUSDZ(H0, false).then(u => { const a = $("qlPlain"); a.href = u; a.innerHTML = '<img src="' + buttonImage("Room view, simple", "iOS") + '" alt="Room view, simple, iOS">'; $("qlPlainRow").hidden = false; }).catch(() => {});
     } catch(e){ $("roomNote").textContent = "The room view couldn't be prepared on this phone (" + (e.message || e) + ")."; }
   }
   $("goPreview").addEventListener("click", () => go(false));

@@ -87,11 +87,11 @@
 <div id="start"><div class="in">
   <p class="eyebrow">Hologram</p>
   <h1 id="title">Style Nebula Atlas</h1>
-  <p>The atlas rises from the printed square: the map on the floor, time climbing upward. Tap a world to read its card.</p>
+  <p id="intro">The atlas rises from the printed square: the map on the floor, time climbing upward.</p>
   <div class="modes">
     <a id="ql" class="mode" rel="ar" hidden></a>
-    <button class="mode" id="goXR" hidden><b>Room view</b><span class="tag">Android only</span><em>Walk around and inside it; cards swipe up from the bottom</em></button>
-    <button class="mode" id="goCam"><b>On the square</b><span class="tag">iPhone &amp; Android</span><em>Pinned to the printed square; cards swipe up from the bottom</em></button>
+    <button class="mode" id="goXR" hidden><b>Room view</b><span class="tag">Android</span></button>
+    <button class="mode" id="goCam"><b>On the square</b><span class="tag">iOS &amp; Android</span></button>
     <div id="qlPlainRow" hidden><a id="qlPlain" rel="ar"></a></div>
   </div>
   <p class="note" id="roomNote"></p>
@@ -116,8 +116,8 @@
 <aside id="card" aria-live="polite"><div class="grab" id="cardGrab" aria-hidden="true"><b></b></div><button type="button" class="x" id="cardX" aria-label="Close">✕</button><div class="body" id="cardBody"></div></aside>
 
 <div id="help"><div class="in">
-  <p><b>Room view</b> (iPhone only, in Apple's AR viewer; Android only, here in the page): your phone tracks the room itself, so the atlas stays put while you walk around it, or pinch it huge and stand inside it. On Android, put the ring on the printed square and tap to set it down; <b>Reset</b> lets you set it down again.</p>
-  <p><b>On the square</b> (iPhone &amp; Android): keep the printed square in view and the atlas stands on it. <b>Reset</b> sets it on the square again.</p>
+  <p><b>Room view</b> (iOS or Android): your phone tracks the room itself, so the atlas stays put while you walk around it, or pinch it huge and stand inside it. On Android, put the ring on the printed square and tap to set it down; <b>Reset</b> lets you set it down again.</p>
+  <p><b>On the square</b> (iOS &amp; Android): keep the printed square in view and the atlas stands on it. <b>Reset</b> sets it on the square again.</p>
   <p><b>Cards</b>: tap a world and its card rises from the bottom of the screen. Swipe it up to read all of it, scroll, then at the top swipe down to lower it and down again to close it.</p>
   <p><b>One finger drag</b> slides the atlas across the floor. <b>Pinch</b> grows or shrinks it. <b>Two-finger twist</b> turns it. <b>Tap</b> a world to open its card; tap empty space to close it.</p>
   <p>The map lies flat; the higher a world floats, the later it was made. Size and brightness are the impact rating: the brightest are friends (+10), the cold blue ones enemies (−10). Works with no single date or place circle the outside ring.</p>
@@ -125,13 +125,13 @@
 </div></div>
 
 </div>
-<script src="config.js?v=10"></script>
+<script src="config.js?v=11"></script>
 <script src="lib/three.min.js"></script>
 <script src="lib/ar-threex.js"></script>
-<script src="lib/usdz-exporter.js?v=10"></script>
+<script src="lib/usdz-exporter.js?v=11"></script>
 <script src="lib/qrcode.js"></script>
 <script src="lib/coast.js"></script>
-<script src="marker.js?v=10"></script>
-<script src="hologram.js?v=10"></script>
+<script src="marker.js?v=11"></script>
+<script src="hologram.js?v=11"></script>
 </body>
 </html>
