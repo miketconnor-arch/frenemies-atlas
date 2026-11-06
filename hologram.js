@@ -414,6 +414,10 @@ async function buildUSDZ(Hh, interactive){
   const mat = (color, op, emis) => new THREE.MeshStandardMaterial({color:new THREE.Color(color).multiplyScalar(.25), emissive:new THREE.Color(emis || color), roughness:.7, metalness:0, transparent:op < 1, opacity:op});
   const pmat = tex => new THREE.MeshStandardMaterial({color:0xffffff, map:tex, emissiveMap:tex, emissive:new THREE.Color(0xffffff), roughness:.8, metalness:0});
   // without behaviours a panel is printed on both faces; the back copy is turned about the vertical so it reads the right way round
+  // Apple's viewer turns a facing panel so its left-to-right edge points up and its face points away (seen in testing),
+  // so each facing panel is pre-turned the opposite way: after Apple's turn it stands upright, reading left to right, toward you
+  const FIX = new THREE.Matrix4().makeRotationFromQuaternion(new THREE.Quaternion(Math.SQRT1_2, Math.SQRT1_2, 0, 0));
+  const faceGeo = (w, h) => { const g = new THREE.PlaneGeometry(w, h); if (interactive) g.applyMatrix4(FIX); return g; };
   const panel = (geo, m, setup) => { const a = new THREE.Mesh(geo, m); setup(a); if (interactive) return [a]; const b = new THREE.Mesh(geo, m); setup(b); b.rotateY(Math.PI); b.translateZ(.002); return [a, b]; };
   const twoSided = (geo, m, setup) => { const a = new THREE.Mesh(geo, m), b = new THREE.Mesh(geo, m); setup(a); setup(b); b.rotateX(Math.PI); return [a, b]; };
   const add = o => (Array.isArray(o) ? o : [o]).forEach(x => root.add(x));
@@ -431,7 +435,7 @@ async function buildUSDZ(Hh, interactive){
   // the time pillar and its years
   const P = Hh.pillar, pil = new THREE.Mesh(new THREE.CylinderGeometry(.008, .008, P.top, 6), mat(HOLO, .9)); pil.position.set(P.x, P.top/2, P.z); add(pil);
   let lastY = -1; P.marks.forEach(([y, h]) => { if (h - lastY < .09) return; lastY = h; const c = labelCanvas(String(y), "", "#7fe3ff"), t = jpg(c), hh = .07, ww = hh*c.width/c.height;
-    const ms = panel(new THREE.PlaneGeometry(ww, hh), pmat(t), m => m.position.set(P.x - ww/2 - .03, h, P.z)); add(ms); facing.push(...ms); });
+    const ms = panel(faceGeo(ww, hh), pmat(t), m => m.position.set(P.x - ww/2 - .03, h, P.z)); add(ms); facing.push(...ms); });
   // the labels, measured first so they can be lifted apart
   const LH = .11, lab = new Map(Hh.items.map(it => { const c = labelCanvas(it.w.title, (it.w.artists || []).join(", ") + (isFinite(it.w.year) && !it.w.noYear ? " · " + it.w.year : ""), it.col); return [it, {c, h:LH, w:LH*c.width/c.height}]; }));
   const ly = liftLabels(Hh.items, it => lab.get(it));
@@ -454,10 +458,10 @@ async function buildUSDZ(Hh, interactive){
     if (!w.void && p.y - r > .01){ const st = new THREE.Mesh(new THREE.CylinderGeometry(.0035, .0035, p.y - r, 4), mat(HOLO, .45)); st.position.set(p.x, (p.y - r)/2, p.z); add(st); }
     const L0 = lab.get(it), y0 = ly.get(it);
     if (y0 - L0.h/2 > p.y + r*1.7){ const tie = new THREE.Mesh(new THREE.CylinderGeometry(.002, .002, y0 - L0.h/2 - p.y - r, 4), mat(it.col, .5)); tie.position.set(p.x, (y0 - L0.h/2 + p.y + r)/2, p.z); add(tie); }
-    const lm = panel(new THREE.PlaneGeometry(L0.w, L0.h), pmat(jpg(L0.c)), m => m.position.set(p.x, y0, p.z)); add(lm); facing.push(...lm);
+    const lm = panel(faceGeo(L0.w, L0.h), pmat(jpg(L0.c)), m => m.position.set(p.x, y0, p.z)); add(lm); facing.push(...lm);
     if (interactive){
       const cc = await cardCanvas(it), cw = 1.5, ch = cw*cc.height/cc.width;
-      const card = new THREE.Mesh(new THREE.PlaneGeometry(cw, ch), pmat(jpg(cc)));
+      const card = new THREE.Mesh(faceGeo(cw, ch), pmat(jpg(cc)));
       card.position.set(p.x, y0 - L0.h/2 + ch/2, p.z); add(card);   // opens over the world's name, its foot where the name sits
       facing.push(card); cards.push(card); taps.push({on:[sph, halo], card});
     }
