@@ -399,8 +399,9 @@ function liftLabels(items, sizeOf){
   [...items].sort((a, b) => b.s - a.s).forEach(it => {
     const p = it.g.position, {w, h} = sizeOf(it); let y = p.y + it.r*1.6 + h/2;
     for (let k = 0; k < 40; k++){
-      const hit = placed.find(q => Math.abs(q.y - y) < (q.h + h)/2*1.05 && Math.hypot(q.x - p.x, q.z - p.z) < (q.w + w)/2*.75);
-      if (!hit) break; y = hit.y + (hit.h + h)/2*1.08;
+      // two names facing you clash if they're closer side to side than half their widths together, at overlapping heights
+      const hit = placed.find(q => Math.abs(q.y - y) < (q.h + h)/2*1.25 && Math.hypot(q.x - p.x, q.z - p.z) < (q.w + w)/2 + .04);
+      if (!hit) break; y = hit.y + (hit.h + h)/2*1.3;
     }
     placed.push({x:p.x, z:p.z, y, w, h}); out.set(it, y);
   });
@@ -418,7 +419,7 @@ async function buildUSDZ(Hh, interactive){
   // is turned a quarter turn clockwise within its own face: it stays facing you and comes out upright
   const FIX = new THREE.Matrix4().makeRotationZ(-Math.PI/2);
   const faceGeo = (w, h) => { const g = new THREE.PlaneGeometry(w, h); if (interactive) g.applyMatrix4(FIX); return g; };
-  const panel = (geo, m, setup) => { const a = new THREE.Mesh(geo, m); setup(a); const b = new THREE.Mesh(geo, m); setup(b); b.rotateY(Math.PI); b.translateZ(.002); return [a, b]; };   // printed on both faces, so a name can never vanish
+  const panel = (geo, m, setup) => { const a = new THREE.Mesh(geo, m); setup(a); if (interactive) return [a]; const b = new THREE.Mesh(geo, m); setup(b); b.rotateY(Math.PI); b.translateZ(.01); return [a, b]; };   // in the tappable model each panel turns to face you, so one face is enough
   const twoSided = (geo, m, setup) => { const a = new THREE.Mesh(geo, m), b = new THREE.Mesh(geo, m); setup(a); setup(b); b.rotateX(Math.PI); return [a, b]; };
   const add = o => (Array.isArray(o) ? o : [o]).forEach(x => root.add(x));
   const facing = [], cards = [], taps = [];
@@ -445,7 +446,7 @@ async function buildUSDZ(Hh, interactive){
   let lastY = -1; P.marks.forEach(([y, h]) => { if (h - lastY < .09) return; lastY = h; const c = labelCanvas(String(y), "", "#7fe3ff"), t = jpg(c), hh = .07, ww = hh*c.width/c.height;
     const ms = panel(faceGeo(ww, hh), pmat(t), m => m.position.set(P.x - ww/2 - .03, h, P.z)); add(ms); facing.push(...ms); });
   // the labels, measured first so they can be lifted apart
-  const LH = .11, lab = new Map(Hh.items.map(it => { const c = labelCanvas(it.w.title, (it.w.artists || []).join(", ") + (isFinite(it.w.year) && !it.w.noYear ? " · " + it.w.year : ""), it.col); return [it, {c, h:LH, w:LH*c.width/c.height}]; }));
+  const LH = .09, short = t => String(t).length > 34 ? String(t).slice(0, 33).trim() + "…" : t, lab = new Map(Hh.items.map(it => { const c = labelCanvas(short(it.w.title), (it.w.artists || []).join(", ") + (isFinite(it.w.year) && !it.w.noYear ? " · " + it.w.year : ""), it.col); return [it, {c, h:LH, w:LH*c.width/c.height}]; }));
   const ly = liftLabels(Hh.items, it => lab.get(it));
   // the works, each with its photo, glow, rings or tail, a stem to the map, its name and its card
   for (const it of Hh.items){
@@ -470,7 +471,9 @@ async function buildUSDZ(Hh, interactive){
     const lm = panel(faceGeo(L0.w, L0.h), pmat(jpg(L0.c)), m => m.position.set(p.x, y0, p.z)); add(lm); facing.push(...lm);
     if (interactive){
       const cc = await cardCanvas(it), cw = 1.5, ch = cw*cc.height/cc.width;
-      const cardM = pmat(jpg(cc)), card = panel(faceGeo(cw, ch), cardM, m => m.position.set(p.x, y0 - L0.h/2 + ch/2, p.z));   // opens over the world's name
+      const dir = new THREE.Vector2(p.x, p.z); if (dir.length() < .05) dir.set(0, 1); dir.normalize();
+      const cr = R0*1.25 + cw*.62 + (w.void ? .25 : 0), cy0 = Math.max(ch/2 + .06, p.y);
+      const cardM = pmat(jpg(cc)), card = panel(faceGeo(cw, ch), cardM, m => m.position.set(dir.x*cr, cy0, dir.y*cr));   // opens in the clear space outside the atlas, beside its world
       add(card); facing.push(...card); cards.push(...card); taps.push({on:[sph, ...glowParts], card});
     }
   }
@@ -513,7 +516,12 @@ ${act}
   let out = "";
   if (cards.length) out += beh("StartHideCards", enter, vis(cards, false, 0));
   if (facing.length) out += beh("StartFaceViewer", enter, look(facing));
-  taps.forEach((t, i) => { out += beh("Open_" + i, tap(t.on), vis(t.card, true, .25)); out += beh("Close_" + i, tap(t.card), vis(t.card, false, .2)); });
+  taps.forEach((t, i) => {
+    const others = cards.filter(c => !t.card.includes(c));
+    if (others.length) out += beh("CloseOthers_" + i, tap(t.on), vis(others, false, 0));
+    out += beh("Open_" + i, tap(t.on), vis(t.card, true, .25));
+    out += beh("Close_" + i, tap(t.card), vis(t.card, false, .2));
+  });
   return out;
 }
 function buttonImage(text){
