@@ -560,10 +560,14 @@ ${body}
   });
   return out;
 }
-function buttonImage(text){
-  const c = document.createElement("canvas"), sc = 2; c.width = 680*sc; c.height = 96*sc; const g = c.getContext("2d"); g.scale(sc, sc);
-  g.fillStyle = "rgba(127,227,255,.16)"; g.strokeStyle = "#7fe3ff"; g.lineWidth = 2; g.beginPath(); g.roundRect ? g.roundRect(2, 2, 676, 92, 46) : g.rect(2, 2, 676, 92); g.fill(); g.stroke();
-  g.fillStyle = "#e8eef8"; g.font = "30px Tahoma, Verdana, sans-serif"; g.textAlign = "center"; g.textBaseline = "middle"; g.fillText(text, 340, 49);
+function buttonImage(title, tag, sub){
+  const W = 760, Hh = 132, sc = 2, c = document.createElement("canvas"); c.width = W*sc; c.height = Hh*sc; const g = c.getContext("2d"); g.scale(sc, sc);
+  const rr = (x, y, w, h, r) => { g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath(); };
+  rr(1.5, 1.5, W - 3, Hh - 3, 26); g.fillStyle = "rgba(127,227,255,.12)"; g.fill(); g.strokeStyle = "#7fe3ff"; g.lineWidth = 2; g.stroke();
+  g.textBaseline = "middle"; g.fillStyle = "#e8eef8"; g.font = "30px Tahoma, Verdana, sans-serif"; g.fillText(title, 28, 46);
+  g.font = "19px Tahoma, Verdana, sans-serif"; const tw = g.measureText(tag.toUpperCase()).width + 26; rr(W - 28 - tw, 28, tw, 36, 16); g.strokeStyle = "rgba(127,227,255,.4)"; g.lineWidth = 1.5; g.stroke();
+  g.fillStyle = "#7fe3ff"; g.fillText(tag.toUpperCase(), W - 28 - tw + 13, 47);
+  g.font = "21px Tahoma, Verdana, sans-serif"; g.fillStyle = "#7d8aa0"; g.fillText(sub, 28, 96);
   return c.toDataURL("image/png");
 }
 
@@ -658,11 +662,50 @@ function select(it){
   if (w.notes) h += '<p class="notes">' + esc(w.notes) + '</p>';
   if (refsOut.length || refsIn.length){ h += '<div class="rel">'; if (refsOut.length) h += '<div>Draws on</div>' + refsOut.map(o => '<button data-k="' + esc(o.w.key) + '">' + esc(o.w.title) + '</button>').join(""); if (refsIn.length) h += '<div style="margin-top:8px">Drawn on by</div>' + refsIn.map(o => '<button data-k="' + esc(o.w.key) + '">' + esc(o.w.title) + '</button>').join(""); h += '</div>'; }
   h += '</div>';
-  $("cardBody").innerHTML = h; $("cardBody").scrollTop = 0; $("card").classList.add("open");
+  $("cardBody").innerHTML = h; $("cardBody").scrollTop = 0; SHEET.set("peek");
   $("cardBody").querySelectorAll(".rel button").forEach(b => b.addEventListener("click", () => { const o = H.byKey.get(b.dataset.k); if (o) select(o); }));
   const ph = $("ph"); if (ph && photos.length > 1){ let i = 0; ph.addEventListener("click", () => { const imgs = ph.querySelectorAll("img"), dots = ph.querySelectorAll(".dots b"); imgs[i].style.display = "none"; dots[i].classList.remove("on"); i = (i + 1) % imgs.length; imgs[i].style.display = "block"; dots[i].classList.add("on"); }); }
 }
-function closeCard(){ $("card").classList.remove("open"); selected = null; if (reticle) reticle.visible = false; if (H && !labelsOn) H.items.forEach(o => { if (o.label) o.label.visible = false; }); }
+/* ---------- the card sheet: peeks up from the bottom, swipes up to full height (then scrolls), swipes down to lower and close ---------- */
+const SHEET = {
+  state:"closed",
+  peekY(){ const c = $("card"); return Math.max(0, c.offsetHeight - Math.min(innerHeight*.46, 430)); },   // how far down it sits when only peeking
+  y(state){ const c = $("card"); return state === "full" ? 0 : state === "peek" ? this.peekY() : c.offsetHeight + 40; },
+  set(state){ this.state = state; const c = $("card"), b = $("cardBody"); c.style.transform = "translateY(" + this.y(state) + "px)"; b.style.overflowY = state === "full" ? "auto" : "hidden"; if (state !== "full") b.scrollTop = 0; c.setAttribute("aria-hidden", String(state === "closed")); },
+  init(){
+    const c = $("card"), b = $("cardBody"); let start = null;
+    const down = (y, target) => { start = {y, y0:this.y(this.state), t:performance.now(), inText:b.contains(target), decided:false, take:false}; };
+    const move = (y, e) => {
+      if (!start) return; const dy = y - start.y;
+      if (!start.decided){ if (Math.abs(dy) < 6) return; start.decided = true;
+        // when the card is full height its text scrolls; it only follows your finger when the text is at the top and you pull down
+        start.take = this.state !== "full" || !start.inText || (dy > 0 && b.scrollTop <= 0); }
+      if (!start.take) return;
+      e.preventDefault(); c.classList.add("drag"); c.style.transform = "translateY(" + Math.max(0, start.y0 + dy) + "px)";
+    };
+    const up = y => {
+      if (!start) return; const s0 = start; start = null; c.classList.remove("drag"); if (!s0.take) return;
+      const dy = y - s0.y, v = dy/Math.max(1, performance.now() - s0.t);   // pixels per millisecond, downward is positive
+      let next = this.state;
+      if (this.state === "full") next = dy > 140 || v > .6 ? (dy > 480 ? "closed" : "peek") : "full";
+      else if (this.state === "peek") next = dy < -40 || v < -.35 ? "full" : (dy > 70 || v > .5 ? "closed" : "peek");
+      this.set(next); if (next === "closed") closeCard();
+    };
+    c.addEventListener("touchstart", e => down(e.touches[0].clientY, e.target), {passive:true});
+    c.addEventListener("touchmove", e => move(e.touches[0].clientY, e), {passive:false});
+    c.addEventListener("touchend", e => up(e.changedTouches[0].clientY));
+    c.addEventListener("touchcancel", e => up(e.changedTouches[0].clientY));
+    // with a mouse (the on-screen view on a computer): drag the grab bar or click it; the wheel opens and scrolls the text
+    let md = false; $("cardGrab").addEventListener("mousedown", e => { md = true; down(e.clientY, e.target); });
+    addEventListener("mousemove", e => { if (md) move(e.clientY, e); }); addEventListener("mouseup", e => { if (md){ md = false; up(e.clientY); } });
+    $("cardGrab").addEventListener("click", () => { if (this.state === "peek") this.set("full"); else if (this.state === "full") this.set("peek"); });
+    c.addEventListener("wheel", e => { if (this.state === "peek" && e.deltaY > 0){ this.set("full"); e.preventDefault(); } else if (this.state === "full" && e.deltaY < 0 && b.scrollTop <= 0){ this.set("peek"); e.preventDefault(); } }, {passive:false});
+    addEventListener("resize", () => this.set(this.state));
+    this.set("closed");
+  }
+};
+addEventListener("DOMContentLoaded", () => SHEET.init());
+function closeCard(){ if (SHEET.state !== "closed") SHEET.set("closed"); selected = null; if (reticle) reticle.visible = false; if (H && !labelsOn) H.items.forEach(o => { if (o.label) o.label.visible = false; }); }
 
 /* ---------- start ---------- */
 let PAYLOAD = null;
@@ -686,22 +729,21 @@ addEventListener("DOMContentLoaded", async () => {
   const ql = $("ql"), qlOK = !!(ql.relList && ql.relList.supports && ql.relList.supports("ar"));
   let xrOK = false; try { xrOK = !!(navigator.xr && await navigator.xr.isSessionSupported("immersive-ar")); } catch(e){}
   if (PAYLOAD && xrOK){
-    $("roomRow").hidden = false; $("goXR").hidden = false;
-    $("roomNote").textContent = "Uses your phone's room tracking, so it stays put as you walk around and inside it. Put the ring on the printed square and tap. Cards open right in the view.";
+    $("goXR").hidden = false;
     $("goXR").addEventListener("click", () => {
       // the session has to be asked for straight from the tap
       navigator.xr.requestSession("immersive-ar", {requiredFeatures:["hit-test"], optionalFeatures:["dom-overlay"], domOverlay:{root:$("ui")}})
         .then(async session => { $("start").style.display = "none"; await startXR(PAYLOAD, session); })
-        .catch(e => { msg.textContent = "Room tracking didn't start: " + (e.message || e) + ". Try Pin it to the square instead."; });
+        .catch(e => { msg.textContent = "Room view didn't start: " + (e.message || e) + ". Try On the square instead."; });
     });
   } else if (PAYLOAD && qlOK){
-    $("roomRow").hidden = false; $("roomNote").textContent = "Preparing the room view…";
+    $("roomNote").textContent = "Preparing the room view…";
     try {
       const H0 = await buildHolo(PAYLOAD), url = await buildUSDZ(H0, true);
-      ql.href = url; ql.innerHTML = '<img src="' + buttonImage("Stand it in your room") + '" alt="Stand it in your room">'; ql.hidden = false;
-      $("roomNote").textContent = "Opens in Apple's AR viewer, which tracks the room the way Fologram does. Aim at the printed square on the floor and it settles there; pinch to make it huge, then walk around and inside it. Names turn to face you; tap a world to open its card, tap the card to close it.";
+      ql.href = url; ql.innerHTML = '<img src="' + buttonImage("Room view", "iPhone only", "Apple's AR viewer: walk around and inside it; cards open in the scene") + '" alt="Room view, iPhone only">'; ql.hidden = false;
+      $("roomNote").textContent = "";
       // a plain model too, without tap behaviours, in case this iPhone's viewer won't open the other
-      buildUSDZ(H0, false).then(u => { const a = $("qlPlain"); a.href = u; a.innerHTML = '<img src="' + buttonImage("Plain room view (no tapping)") + '" alt="Plain room view">'; $("qlPlainRow").hidden = false; }).catch(() => {});
+      buildUSDZ(H0, false).then(u => { const a = $("qlPlain"); a.href = u; a.innerHTML = '<img src="' + buttonImage("Plain room view", "iPhone only", "If the room view won't open: no tapping") + '" alt="Plain room view">'; $("qlPlainRow").hidden = false; }).catch(() => {});
     } catch(e){ $("roomNote").textContent = "The room view couldn't be prepared on this phone (" + (e.message || e) + ")."; }
   }
   $("goPreview").addEventListener("click", () => go(false));

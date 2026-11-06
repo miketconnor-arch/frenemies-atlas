@@ -25,10 +25,13 @@
   .go{display:block;width:100%;padding:14px 18px;margin:0 0 10px;border:1px solid var(--holo);background:rgba(127,227,255,.14);border-radius:28px;font-size:16px;letter-spacing:1px}
   .quiet{display:block;width:100%;padding:12px 18px;margin:0 0 8px;border:1px solid rgba(255,255,255,.18);background:transparent;border-radius:28px;color:var(--ink2);font-size:14px}
   #start a{color:var(--ink3);font-size:13px}
-  #ql{display:block;margin:0 0 10px} #ql img{display:block;width:100%;height:auto}
-  #qlPlain{display:block;margin:-6px auto 18px;width:70%;opacity:.8} #qlPlain img{display:block;width:100%;height:auto}
-  .note{font-size:12.5px!important;color:var(--ink3)!important;margin:-2px 0 16px!important;line-height:1.5!important}
-  #roomRow + .go{background:transparent;border-color:rgba(255,255,255,.25);font-size:14px;padding:12px 18px}
+  .modes{display:flex;flex-direction:column;gap:10px;margin:0 0 12px}
+  .mode{display:grid;grid-template-columns:1fr auto;align-items:center;gap:2px 10px;text-align:left;padding:13px 16px;border:1px solid var(--holo);background:rgba(127,227,255,.12);border-radius:16px;color:var(--ink)}
+  .mode b{font-weight:normal;font-size:17px;letter-spacing:.5px} .mode .tag{font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:var(--holo);border:1px solid var(--line);border-radius:10px;padding:3px 8px;white-space:nowrap}
+  .mode em{grid-column:1 / -1;font-style:normal;font-size:12.5px;color:var(--ink3)}
+  a.mode{padding:0;border:0;background:none;display:block} a.mode img{display:block;width:100%;height:auto}
+  #qlPlain{display:block;margin:0 auto;width:62%;opacity:.75} #qlPlain img{display:block;width:100%;height:auto}
+  .note{font-size:12.5px!important;color:var(--ink3)!important;margin:0 0 14px!important;line-height:1.5!important}
   #ui{position:fixed;inset:0;z-index:4;pointer-events:none}
   #ui > *{pointer-events:auto}
   #touch{position:absolute;inset:0;touch-action:none;background:transparent}
@@ -47,13 +50,18 @@
   #tools button[aria-pressed="true"]{color:var(--holo);border-color:var(--holo)}
   #hint{position:fixed;left:50%;bottom:calc(18px + env(safe-area-inset-bottom));transform:translateX(-50%);z-index:5;font-size:12px;color:var(--ink2);
     background:rgba(4,6,11,.6);border:1px solid var(--line);border-radius:16px;padding:7px 14px;white-space:nowrap;pointer-events:none;transition:opacity .4s}
-  /* the card: a flat panel beside the camera view (right side when held sideways, bottom when upright) */
-  #card{position:fixed;z-index:10;background:rgba(6,10,18,.92);border:1px solid var(--line);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
-    display:flex;flex-direction:column;overflow:hidden;transition:transform .35s ease;touch-action:pan-y}
-  @media (orientation:landscape){ #card{top:0;right:0;bottom:0;width:min(42vw,440px);border-width:0 0 0 1px;transform:translateX(105%)} #card.open{transform:none} }
-  @media (orientation:portrait){ #card{left:0;right:0;bottom:0;height:min(56vh,560px);border-width:1px 0 0;border-radius:16px 16px 0 0;transform:translateY(105%)} #card.open{transform:none} }
-  #card .x{position:absolute;right:10px;top:10px;z-index:2;width:34px;height:34px;border-radius:50%;border:1px solid var(--line);background:rgba(4,6,11,.7);font-size:16px;line-height:1}
-  #card .body{overflow-y:auto;-webkit-overflow-scrolling:touch;padding:0 0 calc(18px + env(safe-area-inset-bottom));-webkit-user-select:text;user-select:text}
+  /* the card: a flat sheet at the bottom of the screen, over the camera view. It opens partway; swipe it up to read
+     the whole card (it scrolls once it's full height), and back at the top swipe it down to lower it, then down again to close. */
+  #card{position:fixed;z-index:10;left:0;right:0;bottom:0;height:92vh;max-height:calc(100% - 40px - env(safe-area-inset-top));
+    background:rgba(6,10,18,.94);border:1px solid var(--line);border-width:1px 0 0;border-radius:18px 18px 0 0;
+    backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);box-shadow:0 -8px 30px rgba(0,0,0,.45);
+    display:flex;flex-direction:column;overflow:hidden;transform:translateY(110vh);transition:transform .32s cubic-bezier(.2,.8,.2,1);touch-action:none;will-change:transform}
+  #card.drag{transition:none}
+  @media (min-width:700px){ #card{left:50%;right:auto;width:560px;margin-left:-280px} }
+  #card .grab{flex:0 0 auto;height:26px;display:grid;place-items:center;cursor:grab}
+  #card .grab b{width:44px;height:5px;border-radius:3px;background:rgba(255,255,255,.35)}
+  #card .x{position:absolute;right:10px;top:8px;z-index:2;width:34px;height:34px;border-radius:50%;border:1px solid var(--line);background:rgba(4,6,11,.7);font-size:16px;line-height:1}
+  #card .body{flex:1 1 auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;padding:0 0 calc(18px + env(safe-area-inset-bottom));-webkit-user-select:text;user-select:text}
   .ph{position:relative;background:#000;aspect-ratio:4/3;overflow:hidden}
   .ph img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
   .ph .scan{position:absolute;inset:0;background:repeating-linear-gradient(0deg,rgba(127,227,255,.06) 0 1px,transparent 1px 3px);pointer-events:none}
@@ -79,14 +87,14 @@
 <div id="start"><div class="in">
   <p class="eyebrow">Hologram</p>
   <h1 id="title">Style Nebula Atlas</h1>
-  <p>The atlas rises from the printed square: the map on the floor, time climbing upward. Pinch to make it as big as the room, walk around and inside it, and tap a world to read it.</p>
-  <div id="roomRow" hidden>
-    <a id="ql" rel="ar" hidden></a>
-    <button class="go" id="goXR" hidden>Stand it in your room</button>
-    <p class="note" id="roomNote"></p>
+  <p>The atlas rises from the printed square: the map on the floor, time climbing upward. Tap a world to read its card.</p>
+  <div class="modes">
+    <a id="ql" class="mode" rel="ar" hidden></a>
+    <button class="mode" id="goXR" hidden><b>Room view</b><span class="tag">Android only</span><em>Walk around and inside it; cards swipe up from the bottom</em></button>
+    <button class="mode" id="goCam"><b>On the square</b><span class="tag">iPhone &amp; Android</span><em>Pinned to the printed square; cards swipe up from the bottom</em></button>
     <div id="qlPlainRow" hidden><a id="qlPlain" rel="ar"></a></div>
   </div>
-  <button class="go" id="goCam">Pin it to the square</button>
+  <p class="note" id="roomNote"></p>
   <button class="quiet" id="goPreview">Look without the camera</button>
   <a href="marker.html">Print the marker</a>
   <div id="msg"></div>
@@ -105,24 +113,25 @@
 </div>
 <div id="hint" hidden>Pinch to scale · drag to move · tap a world</div>
 
-<aside id="card" aria-live="polite"><button type="button" class="x" id="cardX" aria-label="Close">✕</button><div class="body" id="cardBody"></div></aside>
+<aside id="card" aria-live="polite"><div class="grab" id="cardGrab" aria-hidden="true"><b></b></div><button type="button" class="x" id="cardX" aria-label="Close">✕</button><div class="body" id="cardBody"></div></aside>
 
 <div id="help"><div class="in">
-  <p><b>In your room</b> (Stand it in your room): your phone tracks the room itself, so the atlas stays put while you walk around it, or pinch it huge and stand inside it. On Android, put the ring on the printed square and tap to set it down. <b>Reset</b> lets you set it down again.</p>
-  <p><b>Pinned to the square</b>: keep the square in view; the hologram stands on it, and the motion sensors hold it for a few seconds when the square leaves the picture. <b>Reset</b> sets it on the square again.</p>
+  <p><b>Room view</b> (iPhone only, in Apple's AR viewer; Android only, here in the page): your phone tracks the room itself, so the atlas stays put while you walk around it, or pinch it huge and stand inside it. On Android, put the ring on the printed square and tap to set it down; <b>Reset</b> lets you set it down again.</p>
+  <p><b>On the square</b> (iPhone &amp; Android): keep the printed square in view and the atlas stands on it. <b>Reset</b> sets it on the square again.</p>
+  <p><b>Cards</b>: tap a world and its card rises from the bottom of the screen. Swipe it up to read all of it, scroll, then at the top swipe down to lower it and down again to close it.</p>
   <p><b>One finger drag</b> slides the atlas across the floor. <b>Pinch</b> grows or shrinks it. <b>Two-finger twist</b> turns it. <b>Tap</b> a world to open its card; tap empty space to close it.</p>
   <p>The map lies flat; the higher a world floats, the later it was made. Size and brightness are the impact rating: the brightest are friends (+10), the cold blue ones enemies (−10). Works with no single date or place circle the outside ring.</p>
   <button class="quiet" onclick="document.getElementById('help').classList.remove('on')">Close</button>
 </div></div>
 
 </div>
-<script src="config.js?v=9"></script>
+<script src="config.js?v=10"></script>
 <script src="lib/three.min.js"></script>
 <script src="lib/ar-threex.js"></script>
-<script src="lib/usdz-exporter.js?v=9"></script>
+<script src="lib/usdz-exporter.js?v=10"></script>
 <script src="lib/qrcode.js"></script>
 <script src="lib/coast.js"></script>
-<script src="marker.js?v=9"></script>
-<script src="hologram.js?v=9"></script>
+<script src="marker.js?v=10"></script>
+<script src="hologram.js?v=10"></script>
 </body>
 </html>
