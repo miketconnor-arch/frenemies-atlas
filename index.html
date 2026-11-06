@@ -25,6 +25,15 @@
   .go{display:block;width:100%;padding:14px 18px;margin:0 0 10px;border:1px solid var(--holo);background:rgba(127,227,255,.14);border-radius:28px;font-size:16px;letter-spacing:1px}
   .quiet{display:block;width:100%;padding:12px 18px;margin:0 0 8px;border:1px solid rgba(255,255,255,.18);background:transparent;border-radius:28px;color:var(--ink2);font-size:14px}
   #start a{color:var(--ink3);font-size:13px}
+  #ql{display:block;margin:0 0 10px} #ql img{display:block;width:100%;height:auto}
+  .note{font-size:12.5px!important;color:var(--ink3)!important;margin:-2px 0 16px!important;line-height:1.5!important}
+  #roomRow + .go{background:transparent;border-color:rgba(255,255,255,.25);font-size:14px;padding:12px 18px}
+  #ui{position:fixed;inset:0;z-index:4;pointer-events:none}
+  #ui > *{pointer-events:auto}
+  #touch{position:absolute;inset:0;touch-action:none;background:transparent}
+  #coach{position:fixed;left:50%;top:42%;transform:translate(-50%,-50%);max-width:300px;text-align:center;z-index:6;font-size:15px;line-height:1.5;color:#e8eef8;
+    background:rgba(4,6,11,.55);border:1px solid var(--line);border-radius:14px;padding:12px 16px;pointer-events:none}
+  #ui #hud, #ui #hint, #ui #coach{pointer-events:none} #ui #tools{pointer-events:auto}
   #msg{color:#ffb3a7;font-size:13px;min-height:1.2em;margin-top:12px;line-height:1.5}
   /* heads-up controls */
   #hud{position:fixed;left:0;right:0;top:0;z-index:5;display:flex;justify-content:space-between;align-items:flex-start;gap:8px;
@@ -69,13 +78,21 @@
 <div id="start"><div class="in">
   <p class="eyebrow">Hologram</p>
   <h1 id="title">Style Nebula Atlas</h1>
-  <p>Point your camera at the printed square. The atlas rises from it: the map on the table, time climbing upward. Pinch to scale, drag to move, twist with two fingers to turn, tap a world to read it.</p>
-  <button class="go" id="goCam">Start the camera</button>
+  <p>The atlas rises from the printed square: the map on the floor, time climbing upward. Pinch to make it as big as the room, walk around and inside it, and tap a world to read it.</p>
+  <div id="roomRow" hidden>
+    <a id="ql" rel="ar" hidden></a>
+    <button class="go" id="goXR" hidden>Stand it in your room</button>
+    <p class="note" id="roomNote"></p>
+  </div>
+  <button class="go" id="goCam">Pin it to the square</button>
   <button class="quiet" id="goPreview">Look without the camera</button>
   <a href="marker.html">Print the marker</a>
   <div id="msg"></div>
 </div></div>
 
+<div id="ui">
+<div id="touch"></div>
+<div id="coach" hidden></div>
 <div id="hud" hidden>
   <div id="status"><i></i><span>Looking for the square…</span></div>
   <div id="tools">
@@ -89,15 +106,18 @@
 <aside id="card" aria-live="polite"><button type="button" class="x" id="cardX" aria-label="Close">✕</button><div class="body" id="cardBody"></div></aside>
 
 <div id="help"><div class="in">
-  <p><b>Start by holding the square in view for a moment.</b> The hologram is set down on it and then held in place by the phone's motion sensors: turn and look around freely. When the square comes back into view the hologram quietly re-settles on it, and it only jumps to a new spot when it sees the square clearly and steadily. If it ever drifts, aim at the square for a second, or tap <b>Reset</b>.</p>
-  <p><b>One finger drag</b> slides the atlas across the table. <b>Pinch</b> grows or shrinks it. <b>Two-finger twist</b> turns it. <b>Tap</b> a world to open its card; tap empty space to close it. <b>Reset</b> sets it down on the square again.</p>
+  <p><b>In your room</b> (Stand it in your room): your phone tracks the room itself, so the atlas stays put while you walk around it, or pinch it huge and stand inside it. On Android, put the ring on the printed square and tap to set it down. <b>Reset</b> lets you set it down again.</p>
+  <p><b>Pinned to the square</b>: keep the square in view; the hologram stands on it, and the motion sensors hold it for a few seconds when the square leaves the picture. <b>Reset</b> sets it on the square again.</p>
+  <p><b>One finger drag</b> slides the atlas across the floor. <b>Pinch</b> grows or shrinks it. <b>Two-finger twist</b> turns it. <b>Tap</b> a world to open its card; tap empty space to close it.</p>
   <p>The map lies flat; the higher a world floats, the later it was made. Size and brightness are the impact rating: the brightest are friends (+10), the cold blue ones enemies (−10). Works with no single date or place circle the outside ring.</p>
   <button class="quiet" onclick="document.getElementById('help').classList.remove('on')">Close</button>
 </div></div>
 
+</div>
 <script src="config.js"></script>
 <script src="lib/three.min.js"></script>
 <script src="lib/ar-threex.js"></script>
+<script src="lib/usdz-exporter.js"></script>
 <script src="lib/qrcode.js"></script>
 <script src="lib/coast.js"></script>
 <script src="marker.js"></script>

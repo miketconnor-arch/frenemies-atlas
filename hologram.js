@@ -6,6 +6,8 @@
 (function(){
 "use strict";
 const $ = id => document.getElementById(id);
+const START_SCALE = .6;   // on the square, the hologram first appears at this size: its disc is about 2.4 square-widths across
+const XR_UNIT = .18;      // in your room, one square-width is 18 cm: the disc starts about 72 cm across and pinches up from there
 const HOLO = new THREE.Color("#7fe3ff"), COLD = new THREE.Color("#9cc4ff");
 const R0 = 2.0, Y0 = .32, YH = 2.15;              // in marker widths: the map's radius, the lowest year's height, the height of time
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -146,7 +148,8 @@ async function buildHolo(payload){
   const yrs = []; for (let y = Math.ceil(yLo/10)*10; y <= yHi; y += 10) if (!gs.gaps.some(([a, b]) => y > a + 1 && y < b - 1)) yrs.push(y);
   if (!yrs.includes(yLo)) yrs.unshift(yLo); if (!yrs.includes(yHi)) yrs.push(yHi);
   let lastY = -1;
-  yrs.forEach(y => { const h = Y(y); pp.push(pxp - .05, h, pzp, pxp + .05, h, pzp); if (h - lastY > .09){ const lab = labelSprite(String(y), "", "#7fe3ff"); lab.scale.multiplyScalar(.7); lab.center.set(1.15, .5); lab.position.set(pxp, h, pzp); lab.material.opacity = .75; base.add(lab); lastY = h; } });
+  const yearMarks = [];
+  yrs.forEach(y => { const h = Y(y); yearMarks.push([y, h]); pp.push(pxp - .05, h, pzp, pxp + .05, h, pzp); if (h - lastY > .09){ const lab = labelSprite(String(y), "", "#7fe3ff"); lab.scale.multiplyScalar(.7); lab.center.set(1.15, .5); lab.position.set(pxp, h, pzp); lab.material.opacity = .75; base.add(lab); lastY = h; } });
   pil.setAttribute("position", new THREE.Float32BufferAttribute(pp, 3)); base.add(new THREE.LineSegments(pil, lineMat(HOLO, .6)));
 
   // the works
@@ -168,8 +171,8 @@ async function buildHolo(payload){
     if (black){ const disk = new THREE.Mesh(new THREE.TorusGeometry(r*(1.6 + .6*s), r*.18, 8, 64), addMat(COLD, .8)); disk.rotation.x = Math.PI/2.4; g.add(disk); }
     if (nova || (w.kind === "star" && !neg)){ const sp = new THREE.Sprite(spriteMat(TEX.spike, nova ? col : new THREE.Color("#ffffff"), .25 + .7*s)); sp.scale.setScalar(r*(6 + 12*s)); g.add(sp); }
     if (!w.void && w.kind === "planet"){ const n = s >= .9 ? 3 : s >= .6 ? 2 : 1; for (let i = 0; i < n; i++){ const m = new THREE.Mesh(new THREE.RingGeometry(r*(1.5 + .35*i), r*(1.62 + .35*i), 64), addMat(tint, .75 - .15*i)); m.rotation.x = -Math.PI/2 + .45; g.add(m); } }
-    if (!w.void && (w.kind === "comet" || w.kind === "meteor")){ const len = r*(w.kind === "comet" ? 5 + 9*s : 3 + 6*s), cone = new THREE.Mesh(new THREE.ConeGeometry(r*(w.kind === "comet" ? .9 : .5), len, 16, 1, true), addMat(tint, .3)); cone.position.set(0, -len/2, 0); cone.rotation.z = Math.PI; g.add(cone); }
-    if (neg && !w.void){ const rr = rnd(hashStr(w.key || w.title)); for (let i = 0; i < 4 + Math.round(6*s); i++){ const m = new THREE.Mesh(new THREE.TetrahedronGeometry(r*(.18 + .15*rr())), addMat(COLD, .8)); const a = rr()*Math.PI*2, e = (rr() - .5)*1.6, d = r*(1.5 + 1.2*s*rr()); m.position.set(Math.cos(a)*d, e*r, Math.sin(a)*d); g.add(m); } }
+    if (!w.void && (w.kind === "comet" || w.kind === "meteor")){ const len = r*(w.kind === "comet" ? 5 + 9*s : 3 + 6*s), cone = new THREE.Mesh(new THREE.ConeGeometry(r*(w.kind === "comet" ? .75 : .45), len, 16, 1, true), addMat(tint, .12 + .12*s)); cone.position.set(0, -len/2, 0); cone.rotation.z = Math.PI; g.add(cone); }
+    if (neg && !w.void){ const rr = rnd(hashStr(w.key || w.title)); for (let i = 0; i < 4 + Math.round(6*s); i++){ const m = new THREE.Mesh(new THREE.TetrahedronGeometry(r*(.16 + .12*rr())), addMat(COLD, .45)); const a = rr()*Math.PI*2, e = (rr() - .5)*1.6, d = r*(1.5 + 1.2*s*rr()); m.position.set(Math.cos(a)*d, e*r, Math.sin(a)*d); g.add(m); } }
     const hit = new THREE.Mesh(new THREE.SphereGeometry(Math.max(r*2.6, .1), 10, 8), new THREE.MeshBasicMaterial({visible:false})); hit.userData.item = null; g.add(hit);
     if (!w.void) stems.push(p.x, p.y - r, p.z, p.x, 0, p.z);
     const it = {w, g, sphere, halo, hit, r, s, neg, col:"#" + col.getHexString(), styles:sts.map(n => ({name:n, color:colorOf(n)})), spin:(rnd(hashStr(w.title))() - .5)*.6};
@@ -182,11 +185,12 @@ async function buildHolo(payload){
     const p0 = a.g.position, p1 = b.g.position, mid = p0.clone().add(p1).multiplyScalar(.5); mid.y += p0.distanceTo(p1)*.25;
     const curve = new THREE.QuadraticBezierCurve3(p0.clone(), mid, p1.clone()), geo = new THREE.BufferGeometry().setFromPoints(curve.getPoints(24));
     holo.add(new THREE.Line(geo, lineMat(new THREE.Color(a.col), .5))); }));
-  return {holo, items, byKey, links, spin};
+  return {holo, items, byKey, links, spin, coast:cp, pillar:{x:pxp, z:pzp, top:Y0 + YH + .12, marks:yearMarks}};
 }
 
 /* ---------- the stage: camera AR, or an on-screen look ---------- */
 let renderer, scene, camera, anchor, H, mode = null, selected = null, reticle = null, labelsOn = false, lastSeen = 0, ctxAR = null, srcAR = null, markerRoot = null;
+let xr = {session:null, hit:null, viewer:null, placed:false, floor:null, ring:null};
 const clock = new THREE.Clock();
 function initRenderer(){
   renderer = new THREE.WebGLRenderer({canvas:$("gl"), antialias:true, alpha:true});
@@ -218,10 +222,10 @@ async function startPreview(payload){
   addEventListener("resize", () => { renderer.setSize(innerWidth, innerHeight); camera.aspect = innerWidth/innerHeight; camera.updateProjectionMatrix(); });
   mode = "preview"; orbit.apply(); await populate(payload);
 }
-const orbit = {az:.6, el:.62, dist:6.5, apply(){ camera.position.set(Math.sin(this.az)*Math.cos(this.el)*this.dist, 1.1 + Math.sin(this.el)*this.dist, Math.cos(this.az)*Math.cos(this.el)*this.dist); camera.lookAt(0, 1.1, 0); }};
+const orbit = {az:.35, el:.55, dist:8.5, apply(){ camera.position.set(Math.sin(this.az)*Math.cos(this.el)*this.dist, 1.1 + Math.sin(this.el)*this.dist, Math.cos(this.az)*Math.cos(this.el)*this.dist); camera.lookAt(0, 1.1, 0); }};
 async function populate(payload){
   H = await buildHolo(payload);
-  anchor.add(H.holo);
+  anchor.add(H.holo); H.holo.scale.setScalar(mode === "xr" ? 1 : START_SCALE);
   reticle = new THREE.Sprite(spriteMat(TEX.reticle, HOLO, .9)); reticle.visible = false; reticle.renderOrder = 19; H.holo.add(reticle);
   $("hud").hidden = false; $("hint").hidden = false; setTimeout(() => $("hint").style.opacity = "0", 9000);
   if (mode === "preview") setStatus(true, "On-screen view · drag to turn");
@@ -274,38 +278,149 @@ const PIN = {
   // where to draw it this frame: the room pose seen from the phone's current turn
   apply(target){ const inv = (GYRO.ok ? GYRO.q : new THREE.Quaternion()).clone().invert(); target.compose(this.p.clone().applyQuaternion(inv), inv.multiply(this.r), new THREE.Vector3(1, 1, 1)); }
 };
-if (/[?&]debug\b/.test(location.search)) window.__AR = {PIN, anchor:() => anchor, raw:() => markerRoot};   // for checking the tracking
+if (/[?&]debug\b/.test(location.search)) window.__AR = {PIN, anchor:() => anchor, raw:() => markerRoot, buildHolo, buildUSDZ};   // for checking the tracking
 function setStatus(lock, text){ $("status").classList.toggle("lock", !!lock); $("status").querySelector("span").textContent = text; }
-function frame(){
+function frame(time, xf){
   const dt = Math.min(clock.getDelta(), .1), t = clock.elapsedTime; UNI.time.value = t;
+  if (mode === "xr" && xf) xrFrame(xf);
   if (mode === "ar" && srcAR.ready !== false){
     ctxAR.update(srcAR.domElement);
     const now = performance.now();
     if (markerRoot.visible){ PIN.see(markerRoot.matrix, now); lastSeen = now; }
     if (PIN.has){ PIN.apply(anchor.matrix); anchor.matrixWorldNeedsUpdate = true; anchor.visible = true; }
     const lost = lastSeen ? now - lastSeen : 1e9;
-    const st = !PIN.has ? (markerRoot.visible ? "Hold steady on the square…" : "Looking for the square…") : lost < 500 ? "Pinned to the square" : GYRO.ok ? "Pinned · walk around it" : "Bring the square back into view";
+    const st = !PIN.has ? (markerRoot.visible ? "Hold steady on the square…" : "Looking for the square…") : lost < 500 ? "Pinned to the square" : (GYRO.ok && lost < 4000) ? "Held by the motion sensors" : "Aim back at the square";
     if (st !== frame.st){ frame.st = st; setStatus(PIN.has && (lost < 500 || GYRO.ok), st); }
     // without motion sensors the hologram can't hold its place, so it dims while the square is out of sight
-    UNI.fade.value += ((!PIN.has ? 0 : (lost < 700 || GYRO.ok) ? 1 : .35) - UNI.fade.value)*.08;
+    // a browser can sense the phone turning but not walking, so after a few seconds without the square it fades rather than sit in the wrong place
+    UNI.fade.value += ((!PIN.has ? 0 : lost < 700 ? 1 : (GYRO.ok && lost < 4000) ? .9 : .12) - UNI.fade.value)*.08;
   }
   if (H){
     H.spin.rotation.y += dt*.15;
     H.items.forEach(it => { it.sphere.rotation.y += dt*it.spin; it.halo.material.opacity = it.halo.material.opacity*.98 + (.18 + .7*it.s)*(.9 + .1*Math.sin(t*2 + it.r*400))*.02; });
     if (selected){ reticle.position.copy(selected.g.position); reticle.scale.setScalar(selected.r*6); reticle.material.rotation = t*.8; }
-    H.holo.traverse(o => { if (o.material && o.material.opacity !== undefined && o.material.blending === THREE.AdditiveBlending && o.userData.base === undefined) o.userData.base = o.material.opacity; });
   }
   renderer.render(scene, camera);
 }
 
+/* ---------- in your room (Android, Chrome): the phone's own room tracking, as in Fologram ----------
+   ARCore maps the floor as you move the phone, so the hologram stays put while you walk around and inside it.
+   Aim the centre ring at the printed square on the floor and tap: the atlas is set down there, facing you. */
+async function startXR(payload, session){
+  initRenderer(); renderer.xr.enabled = true; renderer.xr.setReferenceSpaceType("local");
+  camera = new THREE.PerspectiveCamera(50, innerWidth/innerHeight, .01, 400); scene.add(camera);
+  await renderer.xr.setSession(session);
+  xr.session = session; xr.viewer = await session.requestReferenceSpace("viewer"); xr.hit = await session.requestHitTestSource({space:xr.viewer});
+  // the finder: a ring lying on whatever floor or table the phone has found
+  xr.ring = new THREE.Group(); xr.ring.matrixAutoUpdate = false; xr.ring.visible = false; scene.add(xr.ring);
+  const r1 = new THREE.Mesh(new THREE.RingGeometry(.07, .085, 48), addMat(HOLO, .9)); r1.rotation.x = -Math.PI/2; xr.ring.add(r1);
+  const r2 = new THREE.Mesh(new THREE.RingGeometry(.11, .115, 48, 1, 0, Math.PI*1.4), addMat(HOLO, .5)); r2.rotation.x = -Math.PI/2; xr.ring.add(r2); xr.spin = r2;
+  const dot = new THREE.Mesh(new THREE.CircleGeometry(.012, 16), addMat(HOLO, 1)); dot.rotation.x = -Math.PI/2; xr.ring.add(dot);
+  anchor.visible = false; anchor.scale.setScalar(XR_UNIT); mode = "xr";
+  session.addEventListener("end", () => location.reload());
+  $("ui").addEventListener("beforexrselect", e => e.preventDefault());   // touches belong to the page's own gestures
+  document.body.classList.add("xr");
+  await populate(payload);
+  coach("Move your phone slowly from side to side so it can find the floor.");
+}
+function coach(t){ const c = $("coach"); if (!c) return; c.textContent = t || ""; c.hidden = !t; }
+function xrFrame(xf){
+  const res = xr.hit ? xf.getHitTestResults(xr.hit) : [];
+  if (res.length){ const pose = res[0].getPose(renderer.xr.getReferenceSpace()); if (pose){ xr.ring.matrix.fromArray(pose.transform.matrix); xr.last = pose.transform.matrix; } }
+  const found = res.length > 0;
+  xr.ring.visible = found && !xr.placed; if (xr.spin) xr.spin.rotation.z += .03;
+  const st = xr.placed ? "In your room · walk around it" : found ? "Aim the ring at the square, then tap" : "Finding the floor…";
+  if (st !== xrFrame.st){ xrFrame.st = st; setStatus(xr.placed || found, st); coach(xr.placed ? "" : found ? "Put the ring on the printed square and tap the screen." : "Move your phone slowly from side to side so it can find the floor."); }
+  UNI.fade.value = 1;
+}
+function xrPlace(){
+  if (!xr.last) return;
+  const m = new THREE.Matrix4().fromArray(xr.last), p = new THREE.Vector3().setFromMatrixPosition(m);
+  const cam = renderer.xr.getCamera(); cam.updateMatrixWorld(true); const cp = new THREE.Vector3().setFromMatrixPosition(cam.matrixWorld);
+  anchor.matrixAutoUpdate = true; anchor.position.copy(p); anchor.rotation.set(0, Math.atan2(cp.x - p.x, cp.z - p.z), 0);
+  anchor.visible = true; xr.placed = true; xr.ring.visible = false; coach("");
+}
+
+/* ---------- in your room (iPhone): Apple's own AR viewer ----------
+   Safari doesn't give web pages room tracking, but it opens 3D models in Apple's AR Quick Look, which has it (ARKit,
+   the same as Fologram). So the hologram is also made into a model: set it on the floor where the square is, pinch it
+   as big as a room, and walk around and inside it. Every world carries its name, as Apple's viewer can't open cards. */
+function labelCanvas(text, sub, color){
+  const fs = 44, pad = 18, c = document.createElement("canvas"), g = c.getContext("2d");
+  g.font = fs + "px Tahoma, Verdana, sans-serif"; const w1 = g.measureText(text).width; g.font = (fs*.62) + "px Tahoma, Verdana, sans-serif"; const w2 = sub ? g.measureText(sub).width : 0;
+  c.width = Math.min(1024, Math.ceil(Math.max(w1, w2) + pad*2 + 10)); c.height = Math.ceil(fs*(sub ? 1.95 : 1.3) + pad);
+  g.fillStyle = "#060b14"; g.fillRect(0, 0, c.width, c.height); g.fillStyle = color; g.fillRect(0, 0, 6, c.height);
+  g.font = fs + "px Tahoma, Verdana, sans-serif"; g.fillStyle = "#eef6ff"; g.textBaseline = "top"; g.fillText(text, pad, pad*.6);
+  if (sub){ g.font = (fs*.62) + "px Tahoma, Verdana, sans-serif"; g.fillStyle = "#9fd6ea"; g.fillText(sub, pad, pad*.6 + fs*1.15); }
+  return c;
+}
+async function buildUSDZ(Hh){
+  const root = new THREE.Group(), U = XR_UNIT;
+  const jpg = c => { const t = new THREE.CanvasTexture(c); t.format = 1022; return t; };   // saved as JPEG, keeps the model light
+  const mat = (color, op, emis) => new THREE.MeshStandardMaterial({color:new THREE.Color(color).multiplyScalar(.25), emissive:new THREE.Color(emis || color), roughness:.7, metalness:0, transparent:op < 1, opacity:op});
+  const pmat = tex => new THREE.MeshStandardMaterial({color:0xffffff, map:tex, emissiveMap:tex, emissive:new THREE.Color(0xffffff), roughness:.8, metalness:0});
+  const twoSided = (geo, m, setup) => { const a = new THREE.Mesh(geo, m), b = new THREE.Mesh(geo, m); setup(a); setup(b); b.rotateX(Math.PI); return [a, b]; };
+  const add = o => (Array.isArray(o) ? o : [o]).forEach(x => root.add(x));
+  // the projector rings on the floor
+  [[R0*.995, R0*1.02, .95], [R0*.62, R0*.625, .4], [R0*.32, R0*.325, .35], [R0*1.16, R0*1.166, .45]].forEach(([a, b, op]) => { const m = new THREE.Mesh(new THREE.RingGeometry(a, b, 128), mat(HOLO, op)); m.rotation.x = -Math.PI/2; m.position.y = .002; add(m); });
+  // coastlines as fine flat ribbons
+  const cp = Hh.coast, pos = [], idx = [], wd = .01;
+  for (let i = 0; i < cp.length; i += 6){
+    const ax = cp[i], az = cp[i+2], bx = cp[i+3], bz = cp[i+5], dx = bx - ax, dz = bz - az, L = Math.hypot(dx, dz) || 1, nx = -dz/L*wd/2, nz = dx/L*wd/2, k = pos.length/3;
+    pos.push(ax - nx, .004, az - nz, ax + nx, .004, az + nz, bx + nx, .004, bz + nz, bx - nx, .004, bz - nz);
+    idx.push(k, k + 1, k + 2, k, k + 2, k + 3);   // wound to face up
+  }
+  if (pos.length){ const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3)); g.setIndex(idx); g.computeVertexNormals(); g.setAttribute("normal", new THREE.Float32BufferAttribute(new Array(pos.length/3).fill(0).flatMap(() => [0, 1, 0]), 3)); g.setAttribute("uv", new THREE.Float32BufferAttribute(new Array(pos.length/3*2).fill(0), 2)); add(new THREE.Mesh(g, mat(HOLO, .8))); }
+  // the time pillar and its years
+  const P = Hh.pillar, pil = new THREE.Mesh(new THREE.CylinderGeometry(.008, .008, P.top, 6), mat(HOLO, .9)); pil.position.set(P.x, P.top/2, P.z); add(pil);
+  let lastY = -1; P.marks.forEach(([y, h]) => { if (h - lastY < .09) return; lastY = h; const c = labelCanvas(String(y), "", "#7fe3ff"), t = jpg(c), hh = .07, ww = hh*c.width/c.height;
+    add(twoSided(new THREE.PlaneGeometry(ww, hh), pmat(t), m => m.position.set(P.x - ww/2 - .03, h, P.z))); });
+  // the works, each with its photo, glow, rings or tail, a stem to the map and its name
+  for (const it of Hh.items){
+    const p = it.g.position, r = it.r, s = it.s, col = it.neg ? COLD : new THREE.Color(it.col), w = it.w, black = w.void && it.neg;
+    let tex = null;
+    if (it.sphere.material.uniforms.hasMap.value){
+      const src = it.sphere.material.uniforms.map.value.image, c = document.createElement("canvas"); c.width = src.width; c.height = src.height; const g = c.getContext("2d"); g.drawImage(src, 0, 0);
+      if (it.neg || black){ const d = g.getImageData(0, 0, c.width, c.height), a = d.data; for (let i = 0; i < a.length; i += 4){ const l = (a[i]*.3 + a[i+1]*.59 + a[i+2]*.11)*(black ? .35 : 1); a[i] = l*.62; a[i+1] = l*.8; a[i+2] = Math.min(255, l*1.08); } g.putImageData(d, 0, 0); }
+      tex = jpg(c);
+    }
+    const sph = new THREE.Mesh(new THREE.SphereGeometry(r, 28, 18), tex ? pmat(tex) : mat(black ? "#000" : col, 1, black ? "#0a1020" : col)); sph.position.copy(p); add(sph);
+    const halo = new THREE.Mesh(new THREE.SphereGeometry(r*(1.5 + 1.3*s), 20, 12), mat(col, .1 + .22*s)); halo.position.copy(p); add(halo);
+    if (black){ const tor = new THREE.Mesh(new THREE.TorusGeometry(r*(1.6 + .6*s), r*.18, 8, 48), mat(COLD, .9)); tor.position.copy(p); tor.rotation.x = Math.PI/2.4; add(tor); }
+    if (!w.void && w.kind === "planet"){ const n = s >= .9 ? 3 : s >= .6 ? 2 : 1; for (let i = 0; i < n; i++) add(twoSided(new THREE.RingGeometry(r*(1.5 + .35*i), r*(1.62 + .35*i), 48), mat(col, .8 - .15*i), m => { m.position.copy(p); m.rotation.x = -Math.PI/2 + .45; })); }
+    if ((w.kind === "star" && !it.neg) || (w.void && !it.neg)){ const L = r*(5 + 9*s); for (const a of [0, Math.PI/2]) add(twoSided(new THREE.PlaneGeometry(L, r*.16), mat("#ffffff", .35 + .5*s), m => { m.position.copy(p); m.rotation.y = a; })); }
+    if (!w.void && (w.kind === "comet" || w.kind === "meteor")){ const len = r*(w.kind === "comet" ? 5 + 9*s : 3 + 6*s), cone = new THREE.Mesh(new THREE.ConeGeometry(r*(w.kind === "comet" ? .75 : .45), len, 14), mat(col, .25 + .2*s)); cone.position.set(p.x, p.y - len/2, p.z); cone.rotation.z = Math.PI; add(cone); }
+    if (it.neg && !w.void){ const rr = rnd(hashStr(w.key || w.title)); for (let i = 0; i < 4 + Math.round(6*s); i++){ const m = new THREE.Mesh(new THREE.TetrahedronGeometry(r*(.16 + .12*rr())), mat(COLD, .8)); const a = rr()*Math.PI*2, e = (rr() - .5)*1.6, d = r*(1.5 + 1.2*s*rr()); m.position.set(p.x + Math.cos(a)*d, p.y + e*r, p.z + Math.sin(a)*d); add(m); } }
+    if (!w.void && p.y - r > .01){ const st = new THREE.Mesh(new THREE.CylinderGeometry(.0035, .0035, p.y - r, 4), mat(HOLO, .45)); st.position.set(p.x, (p.y - r)/2, p.z); add(st); }
+    const c = labelCanvas(w.title, (w.artists || []).join(", ") + (isFinite(w.year) && !w.noYear ? " · " + w.year : ""), it.col), hh = .11, ww = hh*c.width/c.height;
+    add(twoSided(new THREE.PlaneGeometry(ww, hh), pmat(jpg(c)), m => m.position.set(p.x + ww/2 - .02, p.y + r*1.6 + hh/2, p.z)));
+  }
+  // references: thin glowing tubes along the same arcs
+  Hh.links.forEach(([a, b]) => { const p0 = a.g.position, p1 = b.g.position, mid = p0.clone().add(p1).multiplyScalar(.5); mid.y += p0.distanceTo(p1)*.25;
+    add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.QuadraticBezierCurve3(p0.clone(), mid, p1.clone()), 24, .006, 5), mat(a.col, .7))); });
+  root.scale.setScalar(U);
+  const sc = new THREE.Scene(); sc.add(root); sc.updateMatrixWorld(true);
+  const data = await new USDZExporter().parse(sc);
+  return URL.createObjectURL(new Blob([data], {type:"model/vnd.usdz+zip"}));
+}
+function buttonImage(text){
+  const c = document.createElement("canvas"), sc = 2; c.width = 680*sc; c.height = 96*sc; const g = c.getContext("2d"); g.scale(sc, sc);
+  g.fillStyle = "rgba(127,227,255,.16)"; g.strokeStyle = "#7fe3ff"; g.lineWidth = 2; g.beginPath(); g.roundRect ? g.roundRect(2, 2, 676, 92, 46) : g.rect(2, 2, 676, 92); g.fill(); g.stroke();
+  g.fillStyle = "#e8eef8"; g.font = "30px Tahoma, Verdana, sans-serif"; g.textAlign = "center"; g.textBaseline = "middle"; g.fillText(text, 340, 49);
+  return c.toDataURL("image/png");
+}
+
 /* ---------- touch: tap to pick, drag to move, pinch to scale, twist to turn ---------- */
 const touches = new Map(); let gesture = null;
-function ndc(x, y){ const r = renderer.domElement.getBoundingClientRect(); return new THREE.Vector2((x - r.left)/r.width*2 - 1, -((y - r.top)/r.height)*2 + 1); }
+function ndc(x, y){ const r = mode === "xr" ? {left:0, top:0, width:innerWidth, height:innerHeight} : renderer.domElement.getBoundingClientRect(); return new THREE.Vector2((x - r.left)/r.width*2 - 1, -((y - r.top)/r.height)*2 + 1); }
 function rayAt(x, y){
   const v = ndc(x, y), rc = new THREE.Raycaster();
-  if (mode === "preview") rc.setFromCamera(v, camera);
-  else { const inv = camera.projectionMatrix.clone().invert(), d = new THREE.Vector3(v.x, v.y, .5).applyMatrix4(inv).normalize(); rc.set(new THREE.Vector3(0, 0, 0), d); }
-  return rc;
+  // the camera that drew the last frame: the phone's own in room mode, the tracker's in square mode
+  const c = mode === "xr" ? renderer.xr.getCamera().cameras[0] || renderer.xr.getCamera() : camera;
+  c.updateMatrixWorld(true);
+  const o = new THREE.Vector3().setFromMatrixPosition(c.matrixWorld), inv = c.projectionMatrix.clone().invert();
+  const d = new THREE.Vector3(v.x, v.y, .5).applyMatrix4(inv).applyMatrix4(c.matrixWorld).sub(o).normalize();
+  rc.set(o, d); return rc;
 }
 function tablePoint(x, y){
   const rc = rayAt(x, y); anchor.updateMatrixWorld(true);
@@ -318,20 +433,21 @@ function pick(x, y){
   const hits = rc.intersectObjects(H.items.map(i => i.hit), false);
   if (hits.length) select(hits[0].object.userData.item); else closeCard();
 }
-const cv = () => $("gl");
+const cv = () => $("touch");
 addEventListener("DOMContentLoaded", () => {
   const el = cv();
   el.addEventListener("pointerdown", e => { el.setPointerCapture(e.pointerId); touches.set(e.pointerId, {x:e.clientX, y:e.clientY, x0:e.clientX, y0:e.clientY, t0:performance.now()}); startGesture(); });
   el.addEventListener("pointermove", e => { const p = touches.get(e.pointerId); if (!p) return; p.x = e.clientX; p.y = e.clientY; moveGesture(); });
   const end = e => { const p = touches.get(e.pointerId); touches.delete(e.pointerId);
-    if (p && touches.size === 0 && gesture && gesture.n === 1 && Math.hypot(p.x - p.x0, p.y - p.y0) < 10 && performance.now() - p.t0 < 350) pick(p.x, p.y);
+    if (p && touches.size === 0 && gesture && gesture.n === 1 && Math.hypot(p.x - p.x0, p.y - p.y0) < 10 && performance.now() - p.t0 < 350){ if (mode === "xr" && !xr.placed) xrPlace(); else pick(p.x, p.y); }
     startGesture(); };
   el.addEventListener("pointerup", end); el.addEventListener("pointercancel", end);
   el.addEventListener("wheel", e => { e.preventDefault(); if (mode === "preview"){ orbit.dist = clamp(orbit.dist*Math.exp(e.deltaY*.001), 1.5, 20); orbit.apply(); } else if (H) H.holo.scale.multiplyScalar(Math.exp(-e.deltaY*.001)); }, {passive:false});
 });
 function startGesture(){
   const ps = [...touches.values()]; if (!H || !ps.length){ gesture = null; return; }
-  if (ps.length === 1) gesture = {n:1, x:ps[0].x, y:ps[0].y, p:mode === "ar" ? tablePoint(ps[0].x, ps[0].y) : null, pos:H.holo.position.clone(), az:orbit.az, el:orbit.el};
+  if (mode === "xr" && !xr.placed){ gesture = {n:ps.length, x:ps[0].x, y:ps[0].y}; return; }
+  if (ps.length === 1) gesture = {n:1, x:ps[0].x, y:ps[0].y, p:mode === "preview" ? null : tablePoint(ps[0].x, ps[0].y), pos:H.holo.position.clone(), az:orbit.az, el:orbit.el};
   else { const [a, b] = ps; gesture = {n:2, d:Math.hypot(a.x - b.x, a.y - b.y), ang:Math.atan2(b.y - a.y, b.x - a.x), sc:H.holo.scale.x, rot:H.holo.rotation.y, dist:orbit.dist}; }
 }
 function moveGesture(){
@@ -342,7 +458,7 @@ function moveGesture(){
     H.holo.position.set(gesture.pos.x + q.x - gesture.p.x, 0, gesture.pos.z + q.z - gesture.p.z);
   } else if (gesture.n === 2 && ps.length >= 2){
     const [a, b] = ps, d = Math.hypot(a.x - b.x, a.y - b.y), ang = Math.atan2(b.y - a.y, b.x - a.x);
-    const sc = clamp(gesture.sc*d/(gesture.d || 1), .15, 8); H.holo.scale.setScalar(sc);
+    const sc = clamp(gesture.sc*d/(gesture.d || 1), .15, mode === "xr" ? 40 : 8); H.holo.scale.setScalar(sc);   // in your room it can grow big enough to stand inside
     H.holo.rotation.y = gesture.rot - (ang - gesture.ang);
   }
 }
@@ -392,10 +508,30 @@ addEventListener("DOMContentLoaded", async () => {
     } catch(e){ $("start").style.display = ""; msg.textContent = "The camera didn't start: " + (e && (e.message || e.name) || e) + ". Allow camera access for this site and try again."; }
   };
   $("goCam").addEventListener("click", () => go(true));
+  // room tracking: Chrome on Android opens it in the page; iPhone hands a model to Apple's AR viewer
+  const ql = $("ql"), qlOK = !!(ql.relList && ql.relList.supports && ql.relList.supports("ar"));
+  let xrOK = false; try { xrOK = !!(navigator.xr && await navigator.xr.isSessionSupported("immersive-ar")); } catch(e){}
+  if (PAYLOAD && xrOK){
+    $("roomRow").hidden = false; $("goXR").hidden = false;
+    $("roomNote").textContent = "Uses your phone's room tracking, so it stays put as you walk around and inside it. Put the ring on the printed square and tap. Cards open right in the view.";
+    $("goXR").addEventListener("click", () => {
+      // the session has to be asked for straight from the tap
+      navigator.xr.requestSession("immersive-ar", {requiredFeatures:["hit-test"], optionalFeatures:["dom-overlay"], domOverlay:{root:$("ui")}})
+        .then(async session => { $("start").style.display = "none"; await startXR(PAYLOAD, session); })
+        .catch(e => { msg.textContent = "Room tracking didn't start: " + (e.message || e) + ". Try Pin it to the square instead."; });
+    });
+  } else if (PAYLOAD && qlOK){
+    $("roomRow").hidden = false; $("roomNote").textContent = "Preparing the room view…";
+    try {
+      const H0 = await buildHolo(PAYLOAD), url = await buildUSDZ(H0);
+      ql.href = url; ql.innerHTML = '<img src="' + buttonImage("Stand it in your room") + '" alt="Stand it in your room">'; ql.hidden = false;
+      $("roomNote").textContent = "Opens in Apple's AR viewer, which tracks the room the way Fologram does. Aim at the printed square on the floor and it settles there; pinch to make it huge, then walk around and inside it. Each world shows its name; for photos and full cards, use Pin it to the square.";
+    } catch(e){ $("roomNote").textContent = "The room view couldn't be prepared on this phone (" + (e.message || e) + ")."; }
+  }
   $("goPreview").addEventListener("click", () => go(false));
   $("cardX").addEventListener("click", closeCard);
   $("bHelp").addEventListener("click", () => $("help").classList.add("on"));
-  $("bReset").addEventListener("click", () => { if (!H) return; PIN.reset(); H.holo.position.set(0, 0, 0); H.holo.scale.setScalar(1); H.holo.rotation.set(0, 0, 0); if (mode === "preview"){ orbit.az = .6; orbit.el = .62; orbit.dist = 6.5; orbit.apply(); } });
+  $("bReset").addEventListener("click", () => { if (!H) return; PIN.reset(); if (mode === "xr"){ xr.placed = false; anchor.visible = false; xrFrame.st = ""; } H.holo.position.set(0, 0, 0); H.holo.scale.setScalar(mode === "xr" ? 1 : START_SCALE); H.holo.rotation.set(0, 0, 0); if (mode === "preview"){ orbit.az = .35; orbit.el = .55; orbit.dist = 8.5; orbit.apply(); } });
   $("bLabels").addEventListener("click", () => {
     if (!H) return; labelsOn = !labelsOn; $("bLabels").setAttribute("aria-pressed", String(labelsOn));
     H.items.forEach(it => { if (labelsOn && !it.label){ it.label = labelSprite(it.w.title, isFinite(it.w.year) && !it.w.noYear ? String(it.w.year) : "", it.col); it.label.position.y = it.r*1.6; it.label.scale.multiplyScalar(.8); it.g.add(it.label); } if (it.label) it.label.visible = labelsOn || it === selected; });
