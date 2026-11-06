@@ -414,9 +414,9 @@ async function buildUSDZ(Hh, interactive){
   const mat = (color, op, emis) => new THREE.MeshStandardMaterial({color:new THREE.Color(color).multiplyScalar(.25), emissive:new THREE.Color(emis || color), roughness:.7, metalness:0, transparent:op < 1, opacity:op});
   const pmat = tex => new THREE.MeshStandardMaterial({color:0xffffff, map:tex, emissiveMap:tex, emissive:new THREE.Color(0xffffff), roughness:.8, metalness:0});
   // without behaviours a panel is printed on both faces; the back copy is turned about the vertical so it reads the right way round
-  // Apple's viewer turns a facing panel so its left-to-right edge points up and its face points away (seen in testing),
-  // so each facing panel is pre-turned the opposite way: after Apple's turn it stands upright, reading left to right, toward you
-  const FIX = new THREE.Matrix4().makeRotationFromQuaternion(new THREE.Quaternion(Math.SQRT1_2, Math.SQRT1_2, 0, 0));
+  // Apple's viewer keeps a facing panel toward you but stands it a quarter turn sideways (its top edge points to the right
+  // of the screen), so each facing panel is turned a quarter turn the other way within its own face: it stays facing you
+  const FIX = new THREE.Matrix4().makeRotationZ(Math.PI/2);
   const faceGeo = (w, h) => { const g = new THREE.PlaneGeometry(w, h); if (interactive) g.applyMatrix4(FIX); return g; };
   const panel = (geo, m, setup) => { const a = new THREE.Mesh(geo, m); setup(a); if (interactive) return [a]; const b = new THREE.Mesh(geo, m); setup(b); b.rotateY(Math.PI); b.translateZ(.002); return [a, b]; };
   const twoSided = (geo, m, setup) => { const a = new THREE.Mesh(geo, m), b = new THREE.Mesh(geo, m); setup(a); setup(b); b.rotateX(Math.PI); return [a, b]; };
