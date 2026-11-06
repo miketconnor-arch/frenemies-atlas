@@ -414,14 +414,22 @@ async function buildUSDZ(Hh, interactive){
   const mat = (color, op, emis) => new THREE.MeshStandardMaterial({color:new THREE.Color(color).multiplyScalar(.25), emissive:new THREE.Color(emis || color), roughness:.7, metalness:0, transparent:op < 1, opacity:op});
   const pmat = tex => new THREE.MeshStandardMaterial({color:0xffffff, map:tex, emissiveMap:tex, emissive:new THREE.Color(0xffffff), roughness:.8, metalness:0});
   // without behaviours a panel is printed on both faces; the back copy is turned about the vertical so it reads the right way round
-  // Apple's viewer keeps a facing panel toward you but stands it a quarter turn sideways (its top edge points to the right
-  // of the screen), so each facing panel is turned a quarter turn the other way within its own face: it stays facing you
-  const FIX = new THREE.Matrix4().makeRotationZ(Math.PI/2);
+  // Apple's viewer keeps a facing panel toward you but stands it a quarter turn anticlockwise, so each facing panel
+  // is turned a quarter turn clockwise within its own face: it stays facing you and comes out upright
+  const FIX = new THREE.Matrix4().makeRotationZ(-Math.PI/2);
   const faceGeo = (w, h) => { const g = new THREE.PlaneGeometry(w, h); if (interactive) g.applyMatrix4(FIX); return g; };
-  const panel = (geo, m, setup) => { const a = new THREE.Mesh(geo, m); setup(a); if (interactive) return [a]; const b = new THREE.Mesh(geo, m); setup(b); b.rotateY(Math.PI); b.translateZ(.002); return [a, b]; };
+  const panel = (geo, m, setup) => { const a = new THREE.Mesh(geo, m); setup(a); const b = new THREE.Mesh(geo, m); setup(b); b.rotateY(Math.PI); b.translateZ(.002); return [a, b]; };   // printed on both faces, so a name can never vanish
   const twoSided = (geo, m, setup) => { const a = new THREE.Mesh(geo, m), b = new THREE.Mesh(geo, m); setup(a); setup(b); b.rotateX(Math.PI); return [a, b]; };
   const add = o => (Array.isArray(o) ? o : [o]).forEach(x => root.add(x));
   const facing = [], cards = [], taps = [];
+  const flareMat = (color, bright, spikes) => {
+    const S = 128, c = document.createElement("canvas"); c.width = c.height = S; const g = c.getContext("2d"), m = S/2;
+    const gr = g.createRadialGradient(m, m, 0, m, m, m); gr.addColorStop(0, "rgba(255,255,255," + bright + ")"); gr.addColorStop(.22, "rgba(255,255,255," + (bright*.45) + ")"); gr.addColorStop(.6, "rgba(255,255,255," + (bright*.1) + ")"); gr.addColorStop(1, "rgba(255,255,255,0)");
+    g.fillStyle = gr; g.fillRect(0, 0, S, S);
+    if (spikes){ g.translate(m, m); for (const [L, W, a] of [[m, 2.4, 0], [m, 2.4, Math.PI/2], [m*.6, 1.4, Math.PI/4], [m*.6, 1.4, -Math.PI/4]]){ g.save(); g.rotate(a); const lg = g.createLinearGradient(-L, 0, L, 0); lg.addColorStop(0, "rgba(255,255,255,0)"); lg.addColorStop(.5, "rgba(255,255,255," + bright + ")"); lg.addColorStop(1, "rgba(255,255,255,0)"); g.fillStyle = lg; g.beginPath(); g.moveTo(-L, 0); g.lineTo(0, -W); g.lineTo(L, 0); g.lineTo(0, W); g.fill(); g.restore(); } }
+    const t = new THREE.CanvasTexture(c);   // kept RGBA so it's saved as a PNG with soft edges
+    return new THREE.MeshStandardMaterial({color:new THREE.Color(color), map:t, emissive:new THREE.Color(color), emissiveMap:t, transparent:true, roughness:1, metalness:0, depthWrite:false});
+  };
   // the projector rings on the floor
   [[R0*.995, R0*1.02, .95], [R0*.62, R0*.625, .4], [R0*.32, R0*.325, .35], [R0*1.16, R0*1.166, .45]].forEach(([a, b, op]) => { const m = new THREE.Mesh(new THREE.RingGeometry(a, b, 128), mat(HOLO, op)); m.rotation.x = -Math.PI/2; m.position.y = .002; add(m); });
   // coastlines as fine flat ribbons
@@ -449,10 +457,11 @@ async function buildUSDZ(Hh, interactive){
       tex = jpg(c);
     }
     const sph = new THREE.Mesh(new THREE.SphereGeometry(r, 28, 18), tex ? pmat(tex) : mat(black ? "#000" : col, 1, black ? "#0a1020" : col)); sph.position.copy(p); add(sph);
-    const halo = new THREE.Mesh(new THREE.SphereGeometry(r*(1.5 + 1.3*s), 20, 12), mat(col, .1 + .22*s)); halo.position.copy(p); add(halo);
+    const glowParts = [];
+    { const gm = new THREE.Mesh(faceGeo(r*(3.2 + 4*s), r*(3.2 + 4*s)), flareMat(col, .35 + .65*s, false)); gm.position.copy(p); add(gm); facing.push(gm); glowParts.push(gm); }
+    if ((w.kind === "star" && !it.neg) || (w.void && !it.neg)){ const fm = new THREE.Mesh(faceGeo(r*(4 + 9*s), r*(4 + 9*s)), flareMat(w.void ? col : new THREE.Color("#ffffff"), .3 + .7*s, true)); fm.position.copy(p); add(fm); facing.push(fm); glowParts.push(fm); }
     if (black){ const tor = new THREE.Mesh(new THREE.TorusGeometry(r*(1.6 + .6*s), r*.18, 8, 48), mat(COLD, .9)); tor.position.copy(p); tor.rotation.x = Math.PI/2.4; add(tor); }
     if (!w.void && w.kind === "planet"){ const n = s >= .9 ? 3 : s >= .6 ? 2 : 1; for (let i = 0; i < n; i++) add(twoSided(new THREE.RingGeometry(r*(1.5 + .35*i), r*(1.62 + .35*i), 48), mat(col, .8 - .15*i), m => { m.position.copy(p); m.rotation.x = -Math.PI/2 + .45; })); }
-    if ((w.kind === "star" && !it.neg) || (w.void && !it.neg)){ const L = r*(5 + 9*s); for (const a of [0, Math.PI/2]) add(twoSided(new THREE.PlaneGeometry(L, r*.16), mat("#ffffff", .35 + .5*s), m => { m.position.copy(p); m.rotation.y = a; })); }
     if (!w.void && (w.kind === "comet" || w.kind === "meteor")){ const len = r*(w.kind === "comet" ? 5 + 9*s : 3 + 6*s), cone = new THREE.Mesh(new THREE.ConeGeometry(r*(w.kind === "comet" ? .75 : .45), len, 14), mat(col, .25 + .2*s)); cone.position.set(p.x, p.y - len/2, p.z); cone.rotation.z = Math.PI; add(cone); }
     if (it.neg && !w.void){ const rr = rnd(hashStr(w.key || w.title)); for (let i = 0; i < 4 + Math.round(6*s); i++){ const m = new THREE.Mesh(new THREE.TetrahedronGeometry(r*(.16 + .12*rr())), mat(COLD, .8)); const a = rr()*Math.PI*2, e = (rr() - .5)*1.6, d = r*(1.5 + 1.2*s*rr()); m.position.set(p.x + Math.cos(a)*d, p.y + e*r, p.z + Math.sin(a)*d); add(m); } }
     if (!w.void && p.y - r > .01){ const st = new THREE.Mesh(new THREE.CylinderGeometry(.0035, .0035, p.y - r, 4), mat(HOLO, .45)); st.position.set(p.x, (p.y - r)/2, p.z); add(st); }
@@ -461,9 +470,8 @@ async function buildUSDZ(Hh, interactive){
     const lm = panel(faceGeo(L0.w, L0.h), pmat(jpg(L0.c)), m => m.position.set(p.x, y0, p.z)); add(lm); facing.push(...lm);
     if (interactive){
       const cc = await cardCanvas(it), cw = 1.5, ch = cw*cc.height/cc.width;
-      const card = new THREE.Mesh(faceGeo(cw, ch), pmat(jpg(cc)));
-      card.position.set(p.x, y0 - L0.h/2 + ch/2, p.z); add(card);   // opens over the world's name, its foot where the name sits
-      facing.push(card); cards.push(card); taps.push({on:[sph, halo], card});
+      const cardM = pmat(jpg(cc)), card = panel(faceGeo(cw, ch), cardM, m => m.position.set(p.x, y0 - L0.h/2 + ch/2, p.z));   // opens over the world's name
+      add(card); facing.push(...card); cards.push(...card); taps.push({on:[sph, ...glowParts], card});
     }
   }
   // references: thin glowing tubes along the same arcs
@@ -505,7 +513,7 @@ ${act}
   let out = "";
   if (cards.length) out += beh("StartHideCards", enter, vis(cards, false, 0));
   if (facing.length) out += beh("StartFaceViewer", enter, look(facing));
-  taps.forEach((t, i) => { out += beh("Open_" + i, tap(t.on), vis([t.card], true, .25)); out += beh("Close_" + i, tap([t.card]), vis([t.card], false, .2)); });
+  taps.forEach((t, i) => { out += beh("Open_" + i, tap(t.on), vis(t.card, true, .25)); out += beh("Close_" + i, tap(t.card), vis(t.card, false, .2)); });
   return out;
 }
 function buttonImage(text){
