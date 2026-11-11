@@ -25,12 +25,17 @@
   .go{display:block;width:100%;padding:14px 18px;margin:0 0 10px;border:1px solid var(--holo);background:rgba(127,227,255,.14);border-radius:28px;font-size:16px;letter-spacing:1px}
   .quiet{display:block;width:100%;padding:12px 18px;margin:0 0 8px;border:1px solid rgba(255,255,255,.18);background:transparent;border-radius:28px;color:var(--ink2);font-size:14px}
   #start a{color:var(--ink3);font-size:13px}
+  [hidden]{display:none!important}   /* a choice this phone can't run stays hidden whatever its style */
   .modes{display:flex;flex-direction:column;gap:10px;margin:0 0 12px}
   .mode{display:grid;grid-template-columns:1fr auto;align-items:center;gap:2px 10px;text-align:left;padding:13px 16px;border:1px solid var(--holo);background:rgba(127,227,255,.12);border-radius:16px;color:var(--ink)}
   .mode b{font-weight:normal;font-size:17px;letter-spacing:.5px} .mode .tag{font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:var(--holo);border:1px solid var(--line);border-radius:10px;padding:3px 8px;white-space:nowrap}
   .mode em{grid-column:1 / -1;font-style:normal;font-size:12.5px;color:var(--ink3)}
   a.mode{padding:0;border:0;background:none;display:block} a.mode img{display:block;width:100%;height:auto}
-  #qlPlain{display:block;margin:0 auto;width:62%;opacity:.75} #qlPlain img{display:block;width:100%;height:auto}
+  #loading{margin:8px auto 0;max-width:320px}
+  #loading .bar{height:4px;border-radius:2px;background:rgba(127,227,255,.15);overflow:hidden}
+  #loading .bar i{display:block;height:100%;width:4%;background:var(--holo);box-shadow:0 0 12px var(--holo);transition:width .25s ease}
+  #loading p{font-size:13px!important;color:var(--ink3)!important;margin:12px 0 0!important;letter-spacing:.5px}
+  #choices{animation:fadeIn .45s ease} @keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
   .note{font-size:12.5px!important;color:var(--ink3)!important;margin:0 0 14px!important;line-height:1.5!important}
   #ui{position:fixed;inset:0;z-index:4;pointer-events:none}
   #ui > *{pointer-events:auto}
@@ -88,15 +93,20 @@
   <p class="eyebrow">Hologram</p>
   <h1 id="title">Style Nebula Atlas</h1>
   <p id="intro">The atlas rises from the printed square: the map on the floor, time climbing upward.</p>
-  <div class="modes">
-    <a id="ql" class="mode" rel="ar" hidden></a>
-    <button class="mode" id="goXR" hidden><b>Room view</b><span class="tag">Android</span></button>
-    <button class="mode" id="goCam"><b>On the square</b><span class="tag">iOS &amp; Android</span></button>
-    <div id="qlPlainRow" hidden><a id="qlPlain" rel="ar"></a></div>
+  <div id="loading" role="status" aria-live="polite">
+    <div class="bar"><i id="loadBar"></i></div>
+    <p id="loadText">Reading the atlas…</p>
   </div>
-  <p class="note" id="roomNote"></p>
-  <button class="quiet" id="goPreview">Look without the camera</button>
-  <a href="marker.html">Print the marker</a>
+  <div id="choices" hidden>
+    <div class="modes">
+      <a id="ql" class="mode" rel="ar" hidden></a>
+      <button class="mode" id="goXR" hidden><b>Room view</b><span class="tag">Android</span></button>
+      <button class="mode" id="goCam"><b>On the square</b><span class="tag">iOS &amp; Android</span></button>
+    </div>
+    <p class="note" id="roomNote"></p>
+    <button class="quiet" id="goPreview">Look without the camera</button>
+    <a href="marker.html">Print the marker</a>
+  </div>
   <div id="msg"></div>
 </div></div>
 
@@ -125,13 +135,13 @@
 </div></div>
 
 </div>
-<script src="config.js?v=11"></script>
+<script src="config.js?v=13"></script>
 <script src="lib/three.min.js"></script>
 <script src="lib/ar-threex.js"></script>
-<script src="lib/usdz-exporter.js?v=11"></script>
+<script src="lib/usdz-exporter.js?v=13"></script>
 <script src="lib/qrcode.js"></script>
 <script src="lib/coast.js"></script>
-<script src="marker.js?v=11"></script>
-<script src="hologram.js?v=11"></script>
+<script src="marker.js?v=13"></script>
+<script src="hologram.js?v=13"></script>
 </body>
 </html>

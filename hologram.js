@@ -97,7 +97,7 @@ const lineMat = (color, op) => new THREE.LineBasicMaterial({color, transparent:t
 const spriteMat = (tex, color, op) => new THREE.SpriteMaterial({map:tex, color, transparent:true, opacity:op, blending:THREE.AdditiveBlending, depthWrite:false});
 
 /* ---------- building the hologram from the atlas ---------- */
-async function buildHolo(payload){
+async function buildHolo(payload, onP){
   const holo = new THREE.Group(); holo.name = "holo";
   const works = (payload.works || []).filter(w => w && w.title);
   const colors = payload.styleColors || {};
@@ -160,6 +160,7 @@ async function buildHolo(payload){
   spots.forEach(list => list.forEach((w, i) => { const n = list.length, a = i/n*Math.PI*2, rr = n > 1 ? .11*Math.sqrt(n) : 0; pos.set(w, new THREE.Vector3(X(L(w)) + Math.cos(a)*rr, Y(w.year), Z(w.lat) + Math.sin(a)*rr)); }));
   voids.forEach((w, i) => { const a = Math.PI*1.5 + (i + .5)/voids.length*Math.PI*2, rt = isFinite(w.rating) ? w.rating : 0; pos.set(w, new THREE.Vector3(Math.cos(a)*R0*1.16, Y0 + YH*(.5 + rt/24), Math.sin(a)*R0*1.16)); });
   const stems = [];
+  let done = 0;
   await Promise.all(works.map(async w => {
     const p = pos.get(w), rating = isFinite(w.rating) && w.rating !== null ? +w.rating : null, s = rating === null ? .3 : clamp((Math.abs(rating) - 1)/9, 0, 1), neg = rating !== null && rating < 0;
     const sts = styleOf(w), col = new THREE.Color(sts.length ? colorOf(sts[0]) : "#c9c1b5"), tint = neg ? COLD : col;
@@ -177,6 +178,7 @@ async function buildHolo(payload){
     if (!w.void) stems.push(p.x, p.y - r, p.z, p.x, 0, p.z);
     const it = {w, g, sphere, halo, hit, r, s, neg, col:"#" + col.getHexString(), styles:sts.map(n => ({name:n, color:colorOf(n)})), spin:(rnd(hashStr(w.title))() - .5)*.6};
     hit.userData.item = it; items.push(it); if (w.key) byKey.set(w.key, it);
+    if (onP) onP(++done/works.length);
   }));
   if (stems.length){ const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.Float32BufferAttribute(stems, 3)); holo.add(new THREE.LineSegments(g, lineMat(HOLO, .16))); }
   // references: arcs from a work to the works it draws on
@@ -409,7 +411,7 @@ function liftLabels(items, sizeOf){
 }
 /* Builds the model for Apple's AR viewer. With interactive = true it adds Apple's tap behaviours (as Reality
    Composer writes them): labels and cards turn to face you, and tapping a world opens its card. */
-async function buildUSDZ(Hh, interactive){
+async function buildUSDZ(Hh, interactive, onP){
   const root = new THREE.Group(), U = XR_UNIT;
   const jpg = c => { const t = new THREE.CanvasTexture(c); t.format = 1022; return t; };   // saved as JPEG, keeps the model light
   // everything is solid: see-through surfaces flicker against each other in Apple's viewer, so fainter parts are drawn dimmer instead
@@ -423,7 +425,7 @@ async function buildUSDZ(Hh, interactive){
   const panel = (geo, m, setup) => { const a = new THREE.Mesh(geo, m); setup(a); if (interactive) return [a]; const b = new THREE.Mesh(geo, m); setup(b); b.rotateY(Math.PI); b.translateZ(.01); return [a, b]; };   // in the tappable model each panel turns to face you, so one face is enough
   const twoSided = (geo, m, setup) => { const a = new THREE.Mesh(geo, m), b = new THREE.Mesh(geo, m); setup(a); setup(b); b.rotateX(Math.PI); return [a, b]; };
   const add = o => (Array.isArray(o) ? o : [o]).forEach(x => root.add(x));
-  const facing = [], cards = [], taps = [];
+  const facing = [], cards = [], taps = [], names = [];
   const solid = color => new THREE.MeshStandardMaterial({color:new THREE.Color(color).multiplyScalar(.3), emissive:new THREE.Color(color), roughness:1, metalness:0});
   const ringGeo = (a, b) => { const g = new THREE.RingGeometry(a, b, 48); if (interactive) g.applyMatrix4(FIX); return g; };
   // a four-point star: long points up, down and to the sides, short ones between, all tapering to a fine tip
@@ -454,7 +456,9 @@ async function buildUSDZ(Hh, interactive){
   const LH = .09, short = t => String(t).length > 34 ? String(t).slice(0, 33).trim() + "…" : t, lab = new Map(Hh.items.map(it => { const c = labelCanvas(short(it.w.title), (it.w.artists || []).join(", ") + (isFinite(it.w.year) && !it.w.noYear ? " · " + it.w.year : ""), it.col); return [it, {c, h:LH, w:LH*c.width/c.height}]; }));
   const ly = liftLabels(Hh.items, it => lab.get(it));
   // the works, each with its photo, glow, rings or tail, a stem to the map, its name and its card
+  let k = 0;
   for (const it of Hh.items){
+    if (onP){ onP(k/Hh.items.length, k + 1, Hh.items.length); await breathe(); } k++;
     const p = it.g.position, r = it.r, s = it.s, col = it.neg ? COLD : new THREE.Color(it.col), w = it.w, black = w.void && it.neg;
     let tex = null;
     if (it.sphere.material.uniforms.hasMap.value){
@@ -475,13 +479,12 @@ async function buildUSDZ(Hh, interactive){
     if (it.neg && !w.void){ const rr = rnd(hashStr(w.key || w.title)); for (let i = 0; i < 4 + Math.round(6*s); i++){ const m = new THREE.Mesh(new THREE.TetrahedronGeometry(r*(.16 + .12*rr())), mat(COLD, .8)); const a = rr()*Math.PI*2, e = (rr() - .5)*1.6, d = r*(1.5 + 1.2*s*rr()); m.position.set(p.x + Math.cos(a)*d, p.y + e*r, p.z + Math.sin(a)*d); add(m); } }
     if (!w.void && p.y - r > .01){ const st = new THREE.Mesh(new THREE.CylinderGeometry(.0035, .0035, p.y - r, 4), mat(HOLO, .45)); st.position.set(p.x, (p.y - r)/2, p.z); add(st); }
     const L0 = lab.get(it), y0 = ly.get(it);
-    if (y0 - L0.h/2 > p.y + r*1.7){ const tie = new THREE.Mesh(new THREE.CylinderGeometry(.002, .002, y0 - L0.h/2 - p.y - r, 4), mat(it.col, .5)); tie.position.set(p.x, (y0 - L0.h/2 + p.y + r)/2, p.z); add(tie); }
-    const lm = panel(faceGeo(L0.w, L0.h), pmat(jpg(L0.c)), m => m.position.set(p.x, y0, p.z)); add(lm); facing.push(...lm);
+    if (y0 - L0.h/2 > p.y + r*1.7){ const tie = new THREE.Mesh(new THREE.CylinderGeometry(.002, .002, y0 - L0.h/2 - p.y - r, 4), mat(it.col, .5)); tie.position.set(p.x, (y0 - L0.h/2 + p.y + r)/2, p.z); add(tie); names.push(tie); }
+    const lm = panel(faceGeo(L0.w, L0.h), pmat(jpg(L0.c)), m => m.position.set(p.x, y0, p.z)); add(lm); facing.push(...lm); names.push(...lm);
     if (interactive){
-      const cc = await cardCanvas(it), cw = 1.5, ch = cw*cc.height/cc.width;
-      const dir = new THREE.Vector2(p.x, p.z); if (dir.length() < .05) dir.set(0, 1); dir.normalize();
-      const cr = R0*1.25 + cw*.62 + (w.void ? .25 : 0), cy0 = Math.max(ch/2 + .06, p.y);
-      const cardM = pmat(jpg(cc)), card = panel(faceGeo(cw, ch), cardM, m => m.position.set(dir.x*cr, cy0, dir.y*cr));   // opens in the clear space outside the atlas, beside its world
+      const cc = await cardCanvas(it), cw = 1.15, ch = cw*cc.height/cc.width;
+      // the card opens right above the world you tapped, its foot just over the world; every name hides while it's open
+      const cardM = pmat(jpg(cc)), card = panel(faceGeo(cw, ch), cardM, m => m.position.set(p.x, p.y + r*2.2 + ch/2, p.z));
       add(card); facing.push(...card); cards.push(...card); taps.push({on:[sph, ...glowParts], card});
     }
   }
@@ -491,13 +494,13 @@ async function buildUSDZ(Hh, interactive){
   root.scale.setScalar(U);
   const sc = new THREE.Scene(); sc.add(root); sc.updateMatrixWorld(true);
   const options = {ar:{anchoring:{type:"plane"}, planeAnchoring:{alignment:"horizontal"}}};
-  if (interactive) options.sceneExtra = quickLookBehaviours(facing, cards, taps);
+  if (interactive) options.sceneExtra = quickLookBehaviours(facing, cards, taps, names);
   const data = await new USDZExporter().parse(sc, options);
   return URL.createObjectURL(new Blob([data], {type:"model/vnd.usdz+zip"}));
 }
 /* Apple's AR Quick Look reads the same tap behaviours Reality Composer writes into a USDZ file:
    at the start, hide every card and turn every label and card to face you; tapping a world shows its card, tapping the card hides it. */
-function quickLookBehaviours(facing, cards, taps){
+function quickLookBehaviours(facing, cards, taps, names){
   const S = "/Root/Scenes/Scene/", P = o => "<" + S + "Object_" + o.id + ">", L = a => "[ " + a.map(P).join(", ") + " ]";
   const beh = (name, trig, act) => `
         def Preliminary_Behavior "${name}"
@@ -555,18 +558,22 @@ ${body}
   if (facing.length) out += beh("StartFaceViewer", enter, look(facing));
   taps.forEach((t, i) => {
     const others = cards.filter(c => !t.card.includes(c));
-    out += others.length ? behSteps("Open_" + i, tap(t.on), [["CloseOthers", vis(others, false, 0)], ["Show", vis(t.card, true, .25)]]) : beh("Open_" + i, tap(t.on), vis(t.card, true, .25));
-    out += beh("Close_" + i, tap(t.card), vis(t.card, false, .2));
+    const steps = [];
+    if (others.length) steps.push(["CloseOthers", vis(others, false, 0)]);
+    if (names.length) steps.push(["HideNames", vis(names, false, .15)]);
+    steps.push(["Show", vis(t.card, true, .25)]);
+    out += behSteps("Open_" + i, tap(t.on), steps);
+    out += names.length ? behSteps("Close_" + i, tap(t.card), [["Hide", vis(t.card, false, .2)], ["ShowNames", vis(names, true, .2)]]) : beh("Close_" + i, tap(t.card), vis(t.card, false, .2));
   });
   return out;
 }
 function buttonImage(title, tag, sub){
-  const W = 760, Hh = sub ? 132 : 92, sc = 2, c = document.createElement("canvas"); c.width = W*sc; c.height = Hh*sc; const g = c.getContext("2d"); g.scale(sc, sc);
+  const W = 760, Hh = sub ? 132 : 106, sc = 2, c = document.createElement("canvas"); c.width = W*sc; c.height = Hh*sc; const g = c.getContext("2d"); g.scale(sc, sc);
   const rr = (x, y, w, h, r) => { g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath(); };
   rr(1.5, 1.5, W - 3, Hh - 3, 26); g.fillStyle = "rgba(127,227,255,.12)"; g.fill(); g.strokeStyle = "#7fe3ff"; g.lineWidth = 2; g.stroke();
-  g.textBaseline = "middle"; g.fillStyle = "#e8eef8"; g.font = "30px Tahoma, Verdana, sans-serif"; g.fillText(title, 28, sub ? 46 : Hh/2 + 1);
-  g.font = "19px Tahoma, Verdana, sans-serif"; const tw = g.measureText(tag.toUpperCase()).width + 26; const ty = sub ? 28 : Hh/2 - 18; rr(W - 28 - tw, ty, tw, 36, 16); g.strokeStyle = "rgba(127,227,255,.4)"; g.lineWidth = 1.5; g.stroke();
-  g.fillStyle = "#7fe3ff"; g.fillText(tag.toUpperCase(), W - 28 - tw + 13, ty + 19);
+  g.textBaseline = "middle"; g.fillStyle = "#e8eef8"; g.font = "38px Tahoma, Verdana, sans-serif"; g.fillText(title, 34, sub ? 46 : Hh/2 + 1);
+  g.font = "24px Tahoma, Verdana, sans-serif"; const tw = g.measureText(tag.toUpperCase()).width + 30; const ty = sub ? 28 : Hh/2 - 22; rr(W - 28 - tw, ty, tw, 44, 20); g.strokeStyle = "rgba(127,227,255,.4)"; g.lineWidth = 1.5; g.stroke();
+  g.fillStyle = "#7fe3ff"; g.fillText(tag.toUpperCase(), W - 28 - tw + 15, ty + 23);
   if (sub){ g.font = "21px Tahoma, Verdana, sans-serif"; g.fillStyle = "#7d8aa0"; g.fillText(sub, 28, 96); }
   return c.toDataURL("image/png");
 }
@@ -709,11 +716,17 @@ function closeCard(){ if (SHEET.state !== "closed") SHEET.set("closed"); selecte
 
 /* ---------- start ---------- */
 let PAYLOAD = null;
+// the loading bar: nothing to choose from appears until everything is ready, then all the choices arrive together
+function setLoad(frac, text){ const b = $("loadBar"); if (b) b.style.width = Math.round(4 + 96*clamp(frac, 0, 1)) + "%"; if (text && $("loadText")) $("loadText").textContent = text; }
+function reveal(){ $("loading").hidden = true; $("choices").hidden = false; }
+const breathe = () => new Promise(r => setTimeout(r, 0));   // lets the loading bar redraw between steps
 addEventListener("DOMContentLoaded", async () => {
   const msg = $("msg");
+  setLoad(.03, "Reading the atlas…");
   try { PAYLOAD = await loadAtlas(); const t = (PAYLOAD.share && PAYLOAD.share.title) || window.AR_TITLE; if (t){ $("title").textContent = t; document.title = t + " · Hologram"; }
     const intro = PAYLOAD.share && String(PAYLOAD.share.intro || "").trim(); if (intro) $("intro").textContent = intro; }   // your own description from Save a copy to share
   catch(e){ msg.textContent = e.message; }
+  setLoad(.15, "Getting the views ready…");
   const go = async ar => {
     if (!PAYLOAD){ msg.textContent = msg.textContent || "The atlas file hasn't loaded."; return; }
     msg.textContent = "";
@@ -738,13 +751,13 @@ addEventListener("DOMContentLoaded", async () => {
         .catch(e => { msg.textContent = "Room view didn't start: " + (e.message || e) + ". Try On the square instead."; });
     });
   } else if (PAYLOAD && qlOK){
-    $("roomNote").textContent = "Preparing the room view…";
     try {
-      const H0 = await buildHolo(PAYLOAD), url = await buildUSDZ(H0, true);
+      // the iPhone room view is a whole model built here on the phone: photos, names and a card for every world
+      setLoad(.18, "Gathering the photos…");
+      const H0 = await buildHolo(PAYLOAD, f => setLoad(.18 + .2*f));
+      setLoad(.4, "Building the room view…");
+      const url = await buildUSDZ(H0, true, (f, i, n) => setLoad(.4 + .58*f, "Building the room view… " + i + " of " + n + " worlds"));
       ql.href = url; ql.innerHTML = '<img src="' + buttonImage("Room view", "iOS") + '" alt="Room view, iOS">'; ql.hidden = false;
-      $("roomNote").textContent = "";
-      // a plain model too, without tap behaviours, in case this iPhone's viewer won't open the other
-      buildUSDZ(H0, false).then(u => { const a = $("qlPlain"); a.href = u; a.innerHTML = '<img src="' + buttonImage("Room view, simple", "iOS") + '" alt="Room view, simple, iOS">'; $("qlPlainRow").hidden = false; }).catch(() => {});
     } catch(e){ $("roomNote").textContent = "The room view couldn't be prepared on this phone (" + (e.message || e) + ")."; }
   }
   $("goPreview").addEventListener("click", () => go(false));
@@ -756,6 +769,7 @@ addEventListener("DOMContentLoaded", async () => {
     H.items.forEach(it => { if (labelsOn && !it.label){ it.label = labelSprite(it.w.title, isFinite(it.w.year) && !it.w.noYear ? String(it.w.year) : "", it.col); it.label.position.y = it.r*1.6; it.label.scale.multiplyScalar(.8); it.g.add(it.label); } if (it.label) it.label.visible = labelsOn || it === selected; });
   });
   // ?preview opens the on-screen look straight away (handy on a computer)
+  setLoad(1, "Ready"); await breathe(); reveal();
   if (/[?&]preview\b/.test(location.search)) go(false);
 });
 })();
