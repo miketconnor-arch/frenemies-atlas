@@ -425,19 +425,11 @@ async function buildUSDZ(Hh, interactive, onP){
   const panel = (geo, m, setup) => { const a = new THREE.Mesh(geo, m); setup(a); if (interactive) return [a]; const b = new THREE.Mesh(geo, m); setup(b); b.rotateY(Math.PI); b.translateZ(.01); return [a, b]; };   // in the tappable model each panel turns to face you, so one face is enough
   const twoSided = (geo, m, setup) => { const a = new THREE.Mesh(geo, m), b = new THREE.Mesh(geo, m); setup(a); setup(b); b.rotateX(Math.PI); return [a, b]; };
   const add = o => (Array.isArray(o) ? o : [o]).forEach(x => root.add(x));
-  const facing = [], cards = [], taps = [], names = [];
+  const facing = [], cards = [], taps = [], cover = [];
   const solid = color => new THREE.MeshStandardMaterial({color:new THREE.Color(color).multiplyScalar(.3), emissive:new THREE.Color(color), roughness:1, metalness:0});
   const ringGeo = (a, b) => { const g = new THREE.RingGeometry(a, b, 48); if (interactive) g.applyMatrix4(FIX); return g; };
   // a four-point star: long points up, down and to the sides, short ones between, all tapering to a fine tip
   const starGeo = (L, wdt) => { const sh = new THREE.Shape(); for (let i = 0; i < 16; i++){ const a = i*Math.PI/8, rr = i % 4 === 0 ? L : i % 4 === 2 ? L*.42 : wdt; i ? sh.lineTo(Math.cos(a)*rr, Math.sin(a)*rr) : sh.moveTo(Math.cos(a)*rr, Math.sin(a)*rr); } sh.closePath(); const g = new THREE.ShapeGeometry(sh); if (interactive) g.applyMatrix4(FIX); return g; };
-  const flareMat = (color, bright, spikes) => {
-    const S = 128, c = document.createElement("canvas"); c.width = c.height = S; const g = c.getContext("2d"), m = S/2;
-    const gr = g.createRadialGradient(m, m, 0, m, m, m); gr.addColorStop(0, "rgba(255,255,255," + bright + ")"); gr.addColorStop(.22, "rgba(255,255,255," + (bright*.45) + ")"); gr.addColorStop(.6, "rgba(255,255,255," + (bright*.1) + ")"); gr.addColorStop(1, "rgba(255,255,255,0)");
-    g.fillStyle = gr; g.fillRect(0, 0, S, S);
-    if (spikes){ g.translate(m, m); for (const [L, W, a] of [[m, 2.4, 0], [m, 2.4, Math.PI/2], [m*.6, 1.4, Math.PI/4], [m*.6, 1.4, -Math.PI/4]]){ g.save(); g.rotate(a); const lg = g.createLinearGradient(-L, 0, L, 0); lg.addColorStop(0, "rgba(255,255,255,0)"); lg.addColorStop(.5, "rgba(255,255,255," + bright + ")"); lg.addColorStop(1, "rgba(255,255,255,0)"); g.fillStyle = lg; g.beginPath(); g.moveTo(-L, 0); g.lineTo(0, -W); g.lineTo(L, 0); g.lineTo(0, W); g.fill(); g.restore(); } }
-    const t = new THREE.CanvasTexture(c);   // kept RGBA so it's saved as a PNG with soft edges
-    return new THREE.MeshStandardMaterial({color:new THREE.Color(color), map:t, emissive:new THREE.Color(color), emissiveMap:t, transparent:true, roughness:1, metalness:0, depthWrite:false});
-  };
   // the projector rings on the floor
   [[R0*.995, R0*1.02, .95], [R0*.62, R0*.625, .4], [R0*.32, R0*.325, .35], [R0*1.16, R0*1.166, .45]].forEach(([a, b, op]) => { const m = new THREE.Mesh(new THREE.RingGeometry(a, b, 128), mat(HOLO, op)); m.rotation.x = -Math.PI/2; m.position.y = .03 + op*.02; add(m); });   // rings float a few millimetres up, each at its own height
   // coastlines as fine flat ribbons
@@ -452,7 +444,6 @@ async function buildUSDZ(Hh, interactive, onP){
   const P = Hh.pillar, pil = new THREE.Mesh(new THREE.CylinderGeometry(.008, .008, P.top, 6), mat(HOLO, .9)); pil.position.set(P.x, P.top/2, P.z); add(pil);
   let lastY = -1; P.marks.forEach(([y, h]) => { if (h - lastY < .09) return; lastY = h; const c = labelCanvas(String(y), "", "#7fe3ff"), t = jpg(c), hh = .07, ww = hh*c.width/c.height;
     const ms = panel(faceGeo(ww, hh), pmat(t), m => m.position.set(P.x - ww/2 - .03, h, P.z)); add(ms); facing.push(...ms); });
-  const floorCount = root.children.length;   // everything so far lies on the floor or is the thin time pillar: it stays when a card opens
   // the labels, measured first so they can be lifted apart
   const LH = .09, short = t => String(t).length > 34 ? String(t).slice(0, 33).trim() + "…" : t, lab = new Map(Hh.items.map(it => { const c = labelCanvas(short(it.w.title), (it.w.artists || []).join(", ") + (isFinite(it.w.year) && !it.w.noYear ? " · " + it.w.year : ""), it.col); return [it, {c, h:LH, w:LH*c.width/c.height}]; }));
   const ly = liftLabels(Hh.items, it => lab.get(it));
@@ -468,20 +459,20 @@ async function buildUSDZ(Hh, interactive, onP){
       else { const k = .55 + .5*s, d = g.getImageData(0, 0, c.width, c.height), a = d.data; for (let i = 0; i < a.length; i += 4){ a[i] = Math.min(255, a[i]*k); a[i+1] = Math.min(255, a[i+1]*k); a[i+2] = Math.min(255, a[i+2]*k); } g.putImageData(d, 0, 0); }   // the photo glows brighter the higher the rating
       tex = jpg(c);
     }
-    const sph = new THREE.Mesh(new THREE.SphereGeometry(r, 28, 18), tex ? pmat(tex) : mat(black ? "#000" : col, 1, black ? "#0a1020" : col)); sph.position.copy(p); add(sph);
+    const sph = new THREE.Mesh(new THREE.SphereGeometry(r, 28, 18), tex ? pmat(tex) : mat(black ? "#000" : col, 1, black ? "#0a1020" : col)); sph.position.copy(p); add(sph); cover.push(sph);
     // brightness without see-through squares (Apple's viewer shows their edges as flickering boxes): a solid bright ring
     // facing you, thicker the stronger the feeling, and for stars and supernovas a solid four-point star of light
     const glowParts = [];
-    { const gr = new THREE.Mesh(ringGeo(r*1.16, r*(1.2 + .16*s)), solid(col)); gr.position.copy(p); add(gr); facing.push(gr); glowParts.push(gr); }
-    if ((w.kind === "star" && !it.neg) || (w.void && !it.neg)){ const st = new THREE.Mesh(starGeo(r*(1.9 + 3.6*s), r*(.05 + .05*s)), solid(w.void ? col : new THREE.Color("#fffbe8"))); st.position.copy(p); add(st); facing.push(st); glowParts.push(st); }
-    if (black){ const tor = new THREE.Mesh(new THREE.TorusGeometry(r*(1.6 + .6*s), r*.18, 8, 48), mat(COLD, .9)); tor.position.copy(p); tor.rotation.x = Math.PI/2.4; add(tor); }
-    if (!w.void && w.kind === "planet"){ const n = s >= .9 ? 3 : s >= .6 ? 2 : 1; for (let i = 0; i < n; i++) add(twoSided(new THREE.RingGeometry(r*(1.5 + .35*i), r*(1.62 + .35*i), 48), mat(col, .8 - .15*i), m => { m.position.copy(p); m.rotation.x = -Math.PI/2 + .45; })); }
-    if (!w.void && (w.kind === "comet" || w.kind === "meteor")){ const len = r*(w.kind === "comet" ? 5 + 9*s : 3 + 6*s), cone = new THREE.Mesh(new THREE.ConeGeometry(r*(w.kind === "comet" ? .32 : .2), len, 10), mat(col, .3 + .4*s)); cone.position.set(p.x, p.y - len/2, p.z); cone.rotation.z = Math.PI; add(cone); }
+    { const gr = new THREE.Mesh(ringGeo(r*1.16, r*(1.2 + .16*s)), solid(col)); gr.position.copy(p); add(gr); facing.push(gr); glowParts.push(gr); cover.push(gr); }
+    if ((w.kind === "star" && !it.neg) || (w.void && !it.neg)){ const st = new THREE.Mesh(starGeo(r*(1.9 + 3.6*s), r*(.05 + .05*s)), solid(w.void ? col : new THREE.Color("#fffbe8"))); st.position.copy(p); add(st); facing.push(st); glowParts.push(st); cover.push(st); }
+    if (black){ const tor = new THREE.Mesh(new THREE.TorusGeometry(r*(1.6 + .6*s), r*.18, 8, 48), mat(COLD, .9)); tor.position.copy(p); tor.rotation.x = Math.PI/2.4; add(tor); cover.push(tor); }
+    if (!w.void && w.kind === "planet"){ const n = s >= .9 ? 3 : s >= .6 ? 2 : 1; for (let i = 0; i < n; i++){ const rg = twoSided(new THREE.RingGeometry(r*(1.5 + .35*i), r*(1.62 + .35*i), 48), mat(col, .8 - .15*i), m => { m.position.copy(p); m.rotation.x = -Math.PI/2 + .45; }); add(rg); cover.push(...rg); } }
+    if (!w.void && (w.kind === "comet" || w.kind === "meteor")){ const len = r*(w.kind === "comet" ? 5 + 9*s : 3 + 6*s), cone = new THREE.Mesh(new THREE.ConeGeometry(r*(w.kind === "comet" ? .32 : .2), len, 10), mat(col, .3 + .4*s)); cone.position.set(p.x, p.y - len/2, p.z); cone.rotation.z = Math.PI; add(cone); cover.push(cone); }
     if (it.neg && !w.void){ const rr = rnd(hashStr(w.key || w.title)); for (let i = 0; i < 4 + Math.round(6*s); i++){ const m = new THREE.Mesh(new THREE.TetrahedronGeometry(r*(.16 + .12*rr())), mat(COLD, .8)); const a = rr()*Math.PI*2, e = (rr() - .5)*1.6, d = r*(1.5 + 1.2*s*rr()); m.position.set(p.x + Math.cos(a)*d, p.y + e*r, p.z + Math.sin(a)*d); add(m); } }
     if (!w.void && p.y - r > .01){ const st = new THREE.Mesh(new THREE.CylinderGeometry(.0035, .0035, p.y - r, 4), mat(HOLO, .45)); st.position.set(p.x, (p.y - r)/2, p.z); add(st); }
     const L0 = lab.get(it), y0 = ly.get(it);
-    if (y0 - L0.h/2 > p.y + r*1.7){ const tie = new THREE.Mesh(new THREE.CylinderGeometry(.002, .002, y0 - L0.h/2 - p.y - r, 4), mat(it.col, .5)); tie.position.set(p.x, (y0 - L0.h/2 + p.y + r)/2, p.z); add(tie); names.push(tie); }
-    const lm = panel(faceGeo(L0.w, L0.h), pmat(jpg(L0.c)), m => m.position.set(p.x, y0, p.z)); add(lm); facing.push(...lm); names.push(...lm);
+    if (y0 - L0.h/2 > p.y + r*1.7){ const tie = new THREE.Mesh(new THREE.CylinderGeometry(.002, .002, y0 - L0.h/2 - p.y - r, 4), mat(it.col, .5)); tie.position.set(p.x, (y0 - L0.h/2 + p.y + r)/2, p.z); add(tie); }
+    const lm = panel(faceGeo(L0.w, L0.h), pmat(jpg(L0.c)), m => m.position.set(p.x, y0, p.z)); add(lm); facing.push(...lm); cover.push(...lm);
     if (interactive){
       const cc = await cardCanvas(it), cw = 1.15, ch = cw*cc.height/cc.width;
       // the card opens right above the world you tapped, its foot just over the world; every name hides while it's open
@@ -491,19 +482,17 @@ async function buildUSDZ(Hh, interactive, onP){
   }
   // references: thin glowing tubes along the same arcs
   Hh.links.forEach(([a, b]) => { const p0 = a.g.position, p1 = b.g.position, mid = p0.clone().add(p1).multiplyScalar(.5); mid.y += p0.distanceTo(p1)*.25;
-    add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.QuadraticBezierCurve3(p0.clone(), mid, p1.clone()), 24, .006, 5), mat(a.col, .7))); });
-  // what a card could be hidden behind: every world, name, stem and reference line (not the floor, not the cards)
-  const cardSet = new Set(cards), blockers = root.children.slice(floorCount).filter(o => !cardSet.has(o));
+    const tube = new THREE.Mesh(new THREE.TubeGeometry(new THREE.QuadraticBezierCurve3(p0.clone(), mid, p1.clone()), 24, .006, 5), mat(a.col, .7)); add(tube); cover.push(tube); });
   root.scale.setScalar(U);
   const sc = new THREE.Scene(); sc.add(root); sc.updateMatrixWorld(true);
   const options = {ar:{anchoring:{type:"plane"}, planeAnchoring:{alignment:"horizontal"}}};
-  if (interactive) options.sceneExtra = quickLookBehaviours(facing, cards, taps, names, blockers);
+  if (interactive) options.sceneExtra = quickLookBehaviours(facing, cards, taps, cover);
   const data = await new USDZExporter().parse(sc, options);
   return URL.createObjectURL(new Blob([data], {type:"model/vnd.usdz+zip"}));
 }
 /* Apple's AR Quick Look reads the same tap behaviours Reality Composer writes into a USDZ file:
    at the start, hide every card and turn every label and card to face you; tapping a world shows its card, tapping the card hides it. */
-function quickLookBehaviours(facing, cards, taps, names, blockers){
+function quickLookBehaviours(facing, cards, taps, blockers){
   const S = "/Root/Scenes/Scene/", P = o => "<" + S + "Object_" + o.id + ">", L = a => "[ " + a.map(P).join(", ") + " ]";
   const beh = (name, trig, act) => `
         def Preliminary_Behavior "${name}"
@@ -561,7 +550,7 @@ ${body}
   if (facing.length) out += beh("StartFaceViewer", enter, look(facing));
   taps.forEach((t, i) => {
     const others = cards.filter(c => !t.card.includes(c));
-    // opening a card clears the view: every other world, name, stem and line hides, leaving the tapped world, its card and the floor
+    // opening a card clears the view: every other world, name and line that could cover it hides, leaving the tapped world, its card and the floor
     const own = new Set(t.on), clear = blockers.filter(o => !own.has(o)), steps = [];
     if (others.length) steps.push(["CloseOthers", vis(others, false, 0)]);
     if (clear.length) steps.push(["Clear", vis(clear, false, .15)]);
