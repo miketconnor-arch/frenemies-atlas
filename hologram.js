@@ -409,23 +409,6 @@ function liftLabels(items, sizeOf){
   });
   return out;
 }
-// a sphere seen from the inside: faces turned inward, and the picture flipped so it reads the right way round
-function inwardSphere(R, ws, hs){
-  const g = new THREE.SphereGeometry(R, ws, hs), ix = g.index.array, n = g.attributes.normal.array, uv = g.attributes.uv.array;
-  for (let i = 0; i < ix.length; i += 3){ const t = ix[i]; ix[i] = ix[i + 2]; ix[i + 2] = t; }
-  for (let i = 0; i < n.length; i++) n[i] = -n[i];
-  for (let i = 0; i < uv.length; i += 2) uv[i] = 1 - uv[i];
-  return g;
-}
-function dimCanvas(src, k){ const c = document.createElement("canvas"); c.width = src.width; c.height = src.height; const g = c.getContext("2d"); g.drawImage(src, 0, 0); g.fillStyle = "rgba(2,4,10," + (1 - k) + ")"; g.fillRect(0, 0, c.width, c.height); return c; }
-function starfieldCanvas(){
-  const W = 2048, H = 1024, c = document.createElement("canvas"); c.width = W; c.height = H; const g = c.getContext("2d"), rr = rnd(7);
-  const bg = g.createLinearGradient(0, 0, 0, H); bg.addColorStop(0, "#010207"); bg.addColorStop(.5, "#06101c"); bg.addColorStop(1, "#010207"); g.fillStyle = bg; g.fillRect(0, 0, W, H);
-  // a faint cold band where the light bends round the edge of the hole
-  const band = g.createLinearGradient(0, H*.42, 0, H*.58); band.addColorStop(0, "rgba(127,227,255,0)"); band.addColorStop(.5, "rgba(127,227,255,.10)"); band.addColorStop(1, "rgba(127,227,255,0)"); g.fillStyle = band; g.fillRect(0, H*.42, W, H*.16);
-  for (let i = 0; i < 2600; i++){ const x = rr()*W, y = rr()*H, m = Math.pow(rr(), 6); g.fillStyle = "rgba(220,235,255," + (.25 + .75*m) + ")"; g.fillRect(x, y, 1 + 2*m, 1 + 2*m); }
-  return c;
-}
 /* Builds the model for Apple's AR viewer. With interactive = true it adds Apple's tap behaviours (as Reality
    Composer writes them): labels and cards turn to face you, and tapping a world opens its card. */
 async function buildUSDZ(Hh, interactive, onP){
@@ -442,8 +425,7 @@ async function buildUSDZ(Hh, interactive, onP){
   const panel = (geo, m, setup) => { const a = new THREE.Mesh(geo, m); setup(a); if (interactive) return [a]; const b = new THREE.Mesh(geo, m); setup(b); b.rotateY(Math.PI); b.translateZ(.01); return [a, b]; };   // in the tappable model each panel turns to face you, so one face is enough
   const twoSided = (geo, m, setup) => { const a = new THREE.Mesh(geo, m), b = new THREE.Mesh(geo, m); setup(a); setup(b); b.rotateX(Math.PI); return [a, b]; };
   const add = o => (Array.isArray(o) ? o : [o]).forEach(x => root.add(x));
-  const facing = [], cards = [], taps = [], names = [], shells = [];
-  const SHELL_OUT = new THREE.SphereGeometry(1, 24, 16), SHELL_IN = inwardSphere(1, 24, 16);
+  const facing = [], cards = [], taps = [], names = [];
   const solid = color => new THREE.MeshStandardMaterial({color:new THREE.Color(color).multiplyScalar(.3), emissive:new THREE.Color(color), roughness:1, metalness:0});
   const ringGeo = (a, b) => { const g = new THREE.RingGeometry(a, b, 48); if (interactive) g.applyMatrix4(FIX); return g; };
   // a four-point star: long points up, down and to the sides, short ones between, all tapering to a fine tip
@@ -500,32 +482,25 @@ async function buildUSDZ(Hh, interactive, onP){
     if (y0 - L0.h/2 > p.y + r*1.7){ const tie = new THREE.Mesh(new THREE.CylinderGeometry(.002, .002, y0 - L0.h/2 - p.y - r, 4), mat(it.col, .5)); tie.position.set(p.x, (y0 - L0.h/2 + p.y + r)/2, p.z); add(tie); names.push(tie); }
     const lm = panel(faceGeo(L0.w, L0.h), pmat(jpg(L0.c)), m => m.position.set(p.x, y0, p.z)); add(lm); facing.push(...lm); names.push(...lm);
     if (interactive){
-      // tapping a world swallows you: it grows in three steps (shells wrapped in its own darkened photo) until it
-      // engulfs the camera, then the atlas is gone and only its card hangs in a dark starfield, turned toward you
-      const shellMat = tex ? pmat(jpg(dimCanvas(tex.image, .32))) : mat(black ? "#000" : col, .2, black ? "#05080f" : col);
-      const grow = [r*5, .9, 3.6].map(R => { const o = new THREE.Mesh(SHELL_OUT, shellMat), i2 = new THREE.Mesh(SHELL_IN, shellMat); for (const m of [o, i2]){ m.position.copy(p); m.scale.setScalar(R); } add([o, i2]); shells.push(o, i2); return [o, i2]; });   // one shared sphere, sized up, keeps the file light
-      const cc = await cardCanvas(it), cw = 1.9, ch = cw*cc.height/cc.width;
-      const card = panel(faceGeo(cw, ch), pmat(jpg(cc)), m => m.position.set(0, Y0 + YH*.55, 0));
-      add(card); facing.push(...card); cards.push(...card); taps.push({on:[sph, ...glowParts], card, grow});
+      const cc = await cardCanvas(it), cw = 1.15, ch = cw*cc.height/cc.width;
+      // the card opens right above the world you tapped, its foot just over the world; every name hides while it's open
+      const cardM = pmat(jpg(cc)), card = panel(faceGeo(cw, ch), cardM, m => m.position.set(p.x, p.y + r*2.2 + ch/2, p.z));
+      add(card); facing.push(...card); cards.push(...card); taps.push({on:[sph, ...glowParts], card});
     }
   }
   // references: thin glowing tubes along the same arcs
   Hh.links.forEach(([a, b]) => { const p0 = a.g.position, p1 = b.g.position, mid = p0.clone().add(p1).multiplyScalar(.5); mid.y += p0.distanceTo(p1)*.25;
     add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.QuadraticBezierCurve3(p0.clone(), mid, p1.clone()), 24, .006, 5), mat(a.col, .7))); });
-  // the inside of the black hole: a dark starfield all around you, big enough to enclose wherever you stand
-  let voidMeshes = [];
-  if (interactive){ const v = new THREE.Mesh(inwardSphere(40, 48, 32), pmat(jpg(starfieldCanvas()))); v.position.set(0, Y0 + YH*.55, 0); add(v); voidMeshes = [v]; }
-  const keep = new Set([...cards, ...shells, ...voidMeshes]), world = root.children.filter(o => !keep.has(o));
   root.scale.setScalar(U);
   const sc = new THREE.Scene(); sc.add(root); sc.updateMatrixWorld(true);
   const options = {ar:{anchoring:{type:"plane"}, planeAnchoring:{alignment:"horizontal"}}};
-  if (interactive) options.sceneExtra = quickLookBehaviours(facing, cards, taps, names, {world, shells, voidMeshes});
+  if (interactive) options.sceneExtra = quickLookBehaviours(facing, cards, taps, names);
   const data = await new USDZExporter().parse(sc, options);
   return URL.createObjectURL(new Blob([data], {type:"model/vnd.usdz+zip"}));
 }
 /* Apple's AR Quick Look reads the same tap behaviours Reality Composer writes into a USDZ file:
    at the start, hide every card and turn every label and card to face you; tapping a world shows its card, tapping the card hides it. */
-function quickLookBehaviours(facing, cards, taps, names, bh){
+function quickLookBehaviours(facing, cards, taps, names){
   const S = "/Root/Scenes/Scene/", P = o => "<" + S + "Object_" + o.id + ">", L = a => "[ " + a.map(P).join(", ") + " ]";
   const beh = (name, trig, act) => `
         def Preliminary_Behavior "${name}"
@@ -579,24 +554,17 @@ ${body}
   const vis = (objs, show, dur) => `                rel affectedObjects = ${L(objs)}\n                double duration = ${dur}\n                token easeType = "none"\n                token info:id = "Visibility"\n                token motionType = "none"\n                double moveDistance = 0\n                token style = "basic"\n                token type = "${show ? "show" : "hide"}"`;
   const look = objs => `                rel affectedObjects = ${L(objs)}\n                double duration = 9999999999\n                vector3d front = (0, 0, 1)\n                token info:id = "LookAtCamera"\n                vector3d upVector = (0, 1, 0)`;
   let out = "";
-  const startHidden = cards.concat(bh ? bh.shells.concat(bh.voidMeshes) : []);
-  if (startHidden.length) out += beh("StartHideCards", enter, vis(startHidden, false, 0));
+  if (cards.length) out += beh("StartHideCards", enter, vis(cards, false, 0));
   if (facing.length) out += beh("StartFaceViewer", enter, look(facing));
   taps.forEach((t, i) => {
-    // swallowed: the names go, the world grows three times until it engulfs you, the atlas vanishes into the dark, the card appears
+    const others = cards.filter(c => !t.card.includes(c));
     const steps = [];
-    if (names.length) steps.push(["HideNames", vis(names, false, .12)]);
-    t.grow.forEach((g, k) => steps.push(["Grow" + k, vis(g, true, k === 2 ? .3 : .16)]));
-    steps.push(["Swallow", vis(bh.world, false, 0)]);
-    steps.push(["Dark", vis(bh.voidMeshes, true, .35)]);
-    steps.push(["Settle", vis(t.grow.flat(), false, .25)]);
-    steps.push(["Card", vis(t.card, true, .45)]);
+    if (others.length) steps.push(["CloseOthers", vis(others, false, 0)]);
+    if (names.length) steps.push(["HideNames", vis(names, false, .15)]);
+    steps.push(["Show", vis(t.card, true, .25)]);
     out += behSteps("Open_" + i, tap(t.on), steps);
-    // tap the card to come back out: the dark lifts and the atlas returns
-    out += behSteps("Close_" + i, tap(t.card), [["Hide", vis(t.card, false, .2)], ["Light", vis(bh.voidMeshes, false, .35)], ["Return", vis(bh.world, true, .4)]]);
+    out += names.length ? behSteps("Close_" + i, tap(t.card), [["Hide", vis(t.card, false, .2)], ["ShowNames", vis(names, true, .2)]]) : beh("Close_" + i, tap(t.card), vis(t.card, false, .2));
   });
-  // or tap anywhere in the dark
-  if (bh.voidMeshes.length) out += behSteps("CloseFromDark", tap(bh.voidMeshes), [["Hide", vis(cards, false, .2)], ["Light", vis(bh.voidMeshes, false, .35)], ["Return", vis(bh.world, true, .4)]]);
   return out;
 }
 function buttonImage(title, tag, sub){
