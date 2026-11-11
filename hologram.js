@@ -452,6 +452,7 @@ async function buildUSDZ(Hh, interactive, onP){
   const P = Hh.pillar, pil = new THREE.Mesh(new THREE.CylinderGeometry(.008, .008, P.top, 6), mat(HOLO, .9)); pil.position.set(P.x, P.top/2, P.z); add(pil);
   let lastY = -1; P.marks.forEach(([y, h]) => { if (h - lastY < .09) return; lastY = h; const c = labelCanvas(String(y), "", "#7fe3ff"), t = jpg(c), hh = .07, ww = hh*c.width/c.height;
     const ms = panel(faceGeo(ww, hh), pmat(t), m => m.position.set(P.x - ww/2 - .03, h, P.z)); add(ms); facing.push(...ms); });
+  const floorCount = root.children.length;   // everything so far lies on the floor or is the thin time pillar: it stays when a card opens
   // the labels, measured first so they can be lifted apart
   const LH = .09, short = t => String(t).length > 34 ? String(t).slice(0, 33).trim() + "…" : t, lab = new Map(Hh.items.map(it => { const c = labelCanvas(short(it.w.title), (it.w.artists || []).join(", ") + (isFinite(it.w.year) && !it.w.noYear ? " · " + it.w.year : ""), it.col); return [it, {c, h:LH, w:LH*c.width/c.height}]; }));
   const ly = liftLabels(Hh.items, it => lab.get(it));
@@ -491,16 +492,18 @@ async function buildUSDZ(Hh, interactive, onP){
   // references: thin glowing tubes along the same arcs
   Hh.links.forEach(([a, b]) => { const p0 = a.g.position, p1 = b.g.position, mid = p0.clone().add(p1).multiplyScalar(.5); mid.y += p0.distanceTo(p1)*.25;
     add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.QuadraticBezierCurve3(p0.clone(), mid, p1.clone()), 24, .006, 5), mat(a.col, .7))); });
+  // what a card could be hidden behind: every world, name, stem and reference line (not the floor, not the cards)
+  const cardSet = new Set(cards), blockers = root.children.slice(floorCount).filter(o => !cardSet.has(o));
   root.scale.setScalar(U);
   const sc = new THREE.Scene(); sc.add(root); sc.updateMatrixWorld(true);
   const options = {ar:{anchoring:{type:"plane"}, planeAnchoring:{alignment:"horizontal"}}};
-  if (interactive) options.sceneExtra = quickLookBehaviours(facing, cards, taps, names);
+  if (interactive) options.sceneExtra = quickLookBehaviours(facing, cards, taps, names, blockers);
   const data = await new USDZExporter().parse(sc, options);
   return URL.createObjectURL(new Blob([data], {type:"model/vnd.usdz+zip"}));
 }
 /* Apple's AR Quick Look reads the same tap behaviours Reality Composer writes into a USDZ file:
    at the start, hide every card and turn every label and card to face you; tapping a world shows its card, tapping the card hides it. */
-function quickLookBehaviours(facing, cards, taps, names){
+function quickLookBehaviours(facing, cards, taps, names, blockers){
   const S = "/Root/Scenes/Scene/", P = o => "<" + S + "Object_" + o.id + ">", L = a => "[ " + a.map(P).join(", ") + " ]";
   const beh = (name, trig, act) => `
         def Preliminary_Behavior "${name}"
@@ -558,12 +561,14 @@ ${body}
   if (facing.length) out += beh("StartFaceViewer", enter, look(facing));
   taps.forEach((t, i) => {
     const others = cards.filter(c => !t.card.includes(c));
-    const steps = [];
+    // opening a card clears the view: every other world, name, stem and line hides, leaving the tapped world, its card and the floor
+    const own = new Set(t.on), clear = blockers.filter(o => !own.has(o)), steps = [];
     if (others.length) steps.push(["CloseOthers", vis(others, false, 0)]);
-    if (names.length) steps.push(["HideNames", vis(names, false, .15)]);
+    if (clear.length) steps.push(["Clear", vis(clear, false, .15)]);
     steps.push(["Show", vis(t.card, true, .25)]);
     out += behSteps("Open_" + i, tap(t.on), steps);
-    out += names.length ? behSteps("Close_" + i, tap(t.card), [["Hide", vis(t.card, false, .2)], ["ShowNames", vis(names, true, .2)]]) : beh("Close_" + i, tap(t.card), vis(t.card, false, .2));
+    // closing it brings everything back
+    out += clear.length ? behSteps("Close_" + i, tap(t.card), [["Hide", vis(t.card, false, .2)], ["Return", vis(clear, true, .2)]]) : beh("Close_" + i, tap(t.card), vis(t.card, false, .2));
   });
   return out;
 }
